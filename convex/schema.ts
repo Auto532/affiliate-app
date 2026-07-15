@@ -14,6 +14,7 @@ export default defineSchema({
       v.literal("active"),
       v.literal("suspended"),
     ),
+    businessType:  v.optional(v.union(v.literal("private"), v.literal("business"))),
     // Kontakt
     phone:         v.optional(v.string()),
     // Adresse

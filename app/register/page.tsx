@@ -7,12 +7,13 @@ import Link from "next/link";
 
 export default function RegisterPage() {
   const register = useMutation(api.affiliates.register);
-  const [name, setName]         = useState("");
-  const [email, setEmail]       = useState("");
-  const [password, setPassword] = useState("");
-  const [done, setDone]         = useState(false);
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [name, setName]               = useState("");
+  const [email, setEmail]             = useState("");
+  const [password, setPassword]       = useState("");
+  const [businessType, setBusinessType] = useState<"private" | "business">("business");
+  const [done, setDone]               = useState(false);
+  const [error, setError]             = useState("");
+  const [loading, setLoading]         = useState(false);
 
   const hashPassword = async (pw: string) => {
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pw));
@@ -24,7 +25,7 @@ export default function RegisterPage() {
     setError(""); setLoading(true);
     try {
       const passwordHash = await hashPassword(password);
-      await register({ name, email, passwordHash });
+      await register({ name, email, passwordHash, businessType });
       setDone(true);
     } catch (err: any) {
       setError(err.message ?? "Fehler bei der Registrierung");
@@ -82,6 +83,33 @@ export default function RegisterPage() {
               className="w-full px-4 py-3 bg-[#17150f] border border-[rgba(255,255,255,.08)] rounded-xl text-[#f2ede4] placeholder-[rgba(242,237,228,.3)] focus:outline-none focus:border-[rgba(201,162,39,.5)] text-sm"
               placeholder="Mindestens 8 Zeichen"
             />
+          </div>
+
+          {/* Gewerbe / Privat */}
+          <div>
+            <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Ich mache das als</label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["business", "private"] as const).map(type => (
+                <button key={type} type="button" onClick={() => setBusinessType(type)}
+                  className="py-3 rounded-xl text-sm font-semibold transition-all"
+                  style={{
+                    background:  businessType === type ? "rgba(201,162,39,.15)" : "#17150f",
+                    border:      businessType === type ? "1px solid rgba(201,162,39,.5)" : "1px solid rgba(255,255,255,.08)",
+                    color:       businessType === type ? "#c9a227" : "rgba(242,237,228,.5)",
+                  }}>
+                  {type === "business" ? "Gewerbe / Firma" : "Privatperson"}
+                </button>
+              ))}
+            </div>
+            {businessType === "private" && (
+              <div className="mt-2 rounded-xl px-3 py-3 space-y-1"
+                style={{ background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)" }}>
+                <p className="text-xs font-semibold text-yellow-400">Wichtiger Hinweis</p>
+                <p className="text-[11px] text-[rgba(242,237,228,.5)] leading-relaxed">
+                  Als Privatperson gilt die gesetzliche Freigrenze von <strong className="text-[rgba(242,237,228,.8)]">256 €/Jahr</strong> (§22 Nr. 3 EStG). Übersteigen deine Provisionen diesen Betrag, musst du sie vollständig in der Steuererklärung angeben. Bei regelmäßiger Tätigkeit wird eine Gewerbeanmeldung empfohlen.
+                </p>
+              </div>
+            )}
           </div>
 
           {error && <p className="text-red-400 text-sm">{error}</p>}

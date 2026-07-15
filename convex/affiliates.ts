@@ -8,6 +8,7 @@ export const register = mutation({
     name:         v.string(),
     email:        v.string(),
     passwordHash: v.string(),
+    businessType: v.optional(v.union(v.literal("private"), v.literal("business"))),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -35,6 +36,7 @@ export const register = mutation({
       passwordHash: args.passwordHash,
       referralCode: code,
       status:       "pending",
+      businessType: args.businessType,
     });
 
     await ctx.db.insert("auditLog", {

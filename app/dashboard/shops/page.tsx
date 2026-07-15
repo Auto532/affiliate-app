@@ -136,8 +136,8 @@ export default function ShopsPage() {
                   </div>
                 )}
 
-                {/* Zahlungslink — nur vor erster Zahlung */}
-                {contract?.paymentToken && contract.paymentCount === 0 && (
+                {/* Zahlungslink — nur vor erster Zahlung und solange Shop nicht angelegt */}
+                {contract?.paymentToken && contract.paymentCount === 0 && !lead.loatycardShopId && (
                   <CopyPaymentLink token={contract.paymentToken} />
                 )}
 
