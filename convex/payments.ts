@@ -1,6 +1,7 @@
 import { action, internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
 
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? "";
@@ -87,9 +88,9 @@ export const createStripeCheckout = action({
   args: { paymentToken: v.string() },
   handler: async (ctx, args) => {
     const Stripe = (await import("stripe")).default;
-    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2025-05-28.basil" });
+    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2026-06-24.dahlia" });
 
-    const info = await ctx.runQuery(internal.payments.getByPaymentToken, { token: args.paymentToken });
+    const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new Error("Ungültiger Zahlungslink");
 
     const session = await stripe.checkout.sessions.create({
@@ -124,7 +125,7 @@ export const handleStripeWebhook = action({
   args: { payload: v.string(), signature: v.string() },
   handler: async (ctx, args) => {
     const Stripe = (await import("stripe")).default;
-    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2025-05-28.basil" });
+    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2026-06-24.dahlia" });
 
     let event;
     try {
@@ -166,8 +167,8 @@ async function getPayPalToken(): Promise<string> {
 
 export const createPayPalOrder = action({
   args: { paymentToken: v.string() },
-  handler: async (ctx, args) => {
-    const info = await ctx.runQuery(internal.payments.getByPaymentToken, { token: args.paymentToken });
+  handler: async (ctx, args): Promise<{ orderId: string; contractId: Id<"shopContracts"> }> => {
+    const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new Error("Ungültiger Zahlungslink");
 
     const token = await getPayPalToken();
@@ -195,7 +196,7 @@ export const capturePayPalOrder = action({
     orderId:    v.string(),
     contractId: v.id("shopContracts"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ status: string }> => {
     const token = await getPayPalToken();
     const res   = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${args.orderId}/capture`, {
       method:  "POST",

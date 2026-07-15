@@ -26,9 +26,9 @@ export default function ProvisionsPage() {
 
   const commissions = useQuery(api.shopLeads.myCommissions, token ? { token } : "skip");
 
-  const total    = commissions?.reduce((s, c) => s + c.amount, 0) ?? 0;
-  const pending  = commissions?.filter(c => c.status === "pending").reduce((s, c) => s + c.amount, 0) ?? 0;
-  const confirmed = commissions?.filter(c => c.status === "confirmed").reduce((s, c) => s + c.amount, 0) ?? 0;
+  const total    = commissions?.reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
+  const pending  = commissions?.filter((c: { status: string }) => c.status === "pending").reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
+  const confirmed = commissions?.filter((c: { status: string }) => c.status === "confirmed").reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
 
   return (
     <div className="min-h-screen max-w-lg mx-auto px-4 py-8 space-y-4">
