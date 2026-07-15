@@ -137,6 +137,7 @@ export const acceptAffiliateInvite = mutation({
     bankIban:     v.optional(v.string()),
     bankBic:      v.optional(v.string()),
     bankName:     v.optional(v.string()),
+    businessType: v.optional(v.union(v.literal("private"), v.literal("business"))),
   },
   handler: async (ctx, args) => {
     const invite = await ctx.db
@@ -181,6 +182,7 @@ export const acceptAffiliateInvite = mutation({
       bankIban:     args.bankIban,
       bankBic:      args.bankBic,
       bankName:     args.bankName,
+      businessType: args.businessType,
     });
 
     await ctx.db.patch(invite._id, { usedAt: Date.now(), affiliateId });

@@ -30,11 +30,12 @@ export default function PartnerInvitePage() {
   const token  = params.token as string;
   const accept = useMutation(api.affiliates.acceptAffiliateInvite);
 
-  const [form, setForm]       = useState(EMPTY);
-  const [section, setSection] = useState<Section>("zugangsdaten");
-  const [done, setDone]       = useState(false);
-  const [error, setError]     = useState("");
-  const [loading, setLoading] = useState(false);
+  const [form, setForm]             = useState(EMPTY);
+  const [businessType, setBusinessType] = useState<"private" | "business">("business");
+  const [section, setSection]       = useState<Section>("zugangsdaten");
+  const [done, setDone]             = useState(false);
+  const [error, setError]           = useState("");
+  const [loading, setLoading]       = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -48,6 +49,7 @@ export default function PartnerInvitePage() {
       const passwordHash = await sha256(form.password);
       await accept({
         inviteToken:  token,
+        businessType,
         name:         form.name,
         email:        form.email,
         passwordHash,
@@ -149,6 +151,32 @@ export default function PartnerInvitePage() {
             <div className="rounded-xl px-4 py-3 text-xs text-[rgba(242,237,228,.5)]"
               style={{ background: "rgba(201,162,39,.06)", border: "1px solid rgba(201,162,39,.15)" }}>
               Diese Angaben werden für die Provisionsabrechnung und steuerliche Erfassung benötigt.
+            </div>
+
+            <div>
+              <label className="block text-xs text-[rgba(242,237,228,.4)] mb-2">Ich mache das als</label>
+              <div className="grid grid-cols-2 gap-2">
+                {(["business", "private"] as const).map(type => (
+                  <button key={type} type="button" onClick={() => setBusinessType(type)}
+                    className="py-3 rounded-xl text-sm font-semibold transition-all"
+                    style={{
+                      background:  businessType === type ? "rgba(201,162,39,.15)" : "#17150f",
+                      border:      businessType === type ? "1px solid rgba(201,162,39,.5)" : "1px solid rgba(255,255,255,.08)",
+                      color:       businessType === type ? "#c9a227" : "rgba(242,237,228,.5)",
+                    }}>
+                    {type === "business" ? "Gewerbe / Firma" : "Privatperson"}
+                  </button>
+                ))}
+              </div>
+              {businessType === "private" && (
+                <div className="mt-2 rounded-xl px-3 py-3 space-y-1"
+                  style={{ background: "rgba(251,191,36,.06)", border: "1px solid rgba(251,191,36,.2)" }}>
+                  <p className="text-xs font-semibold text-yellow-400">Wichtiger Hinweis</p>
+                  <p className="text-[11px] text-[rgba(242,237,228,.5)] leading-relaxed">
+                    Als Privatperson gilt die gesetzliche Freigrenze von <strong className="text-[rgba(242,237,228,.8)]">256 €/Jahr</strong> (§22 Nr. 3 EStG). Übersteigen deine Provisionen diesen Betrag, musst du sie vollständig in der Steuererklärung angeben. Bei regelmäßiger Tätigkeit wird eine Gewerbeanmeldung empfohlen.
+                  </p>
+                </div>
+              )}
             </div>
             {[
               { k: "company",     label: "Firmenname (falls Gewerbe)",  placeholder: ""             },
