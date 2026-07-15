@@ -15,6 +15,7 @@ import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as passwords from "../passwords.js";
 import type * as payments from "../payments.js";
+import type * as pricing from "../pricing.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as shopLeads from "../shopLeads.js";
 import type * as testPayments from "../testPayments.js";
@@ -33,6 +34,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   passwords: typeof passwords;
   payments: typeof payments;
+  pricing: typeof pricing;
   rateLimit: typeof rateLimit;
   shopLeads: typeof shopLeads;
   testPayments: typeof testPayments;

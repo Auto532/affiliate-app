@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
+import { planPrice } from "./pricing";
 
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? "";
 const STRIPE_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -38,7 +39,7 @@ export const getByPaymentToken = query({
       planType:   contract.planType,
       shopName:   lead?.shopName ?? "Loatycard Shop",
       ownerName:  lead?.ownerName ?? "",
-      amount:     contract.planType === "annual" ? 389 : 39,
+      amount:     planPrice(contract.planType),
       paymentCount: contract.paymentCount,
     };
   },
@@ -202,7 +203,7 @@ export const provisionShop = internalAction({
       loatycardAdminToken: adminLoginToken,
     });
 
-    const planLabel  = lead.planType === "annual" ? "Jahresabo (€389)" : "Monatsabo (€39)";
+    const planLabel  = lead.planType === "annual" ? `Jahresabo (€${planPrice("annual")})` : `Monatsabo (€${planPrice("monthly")})`;
     const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${lead.ownerPhone}`   : "";
     const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${lead.city}`            : "";
     const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${lead.businessType}` : "";
@@ -228,7 +229,7 @@ export const getExpectedAmount = internalQuery({
   handler: async (ctx, args): Promise<{ amount: number } | null> => {
     const contract = await ctx.db.get(args.shopContractId);
     if (!contract) return null;
-    return { amount: contract.planType === "annual" ? 389 : 39 };
+    return { amount: planPrice(contract.planType) };
   },
 });
 

@@ -1,7 +1,6 @@
 // ── Provisions-Regeln ────────────────────────────────────────────────────────
 
-const ANNUAL_BASE  = 389;
-const MONTHLY_BASE = 39;
+import { planPrice } from "./pricing";
 
 export type CommissionPhase = "initial" | "year2" | "year3" | "year4_plus";
 
@@ -40,7 +39,7 @@ export function resolveCommissionRule(
     year4_plus: 0.15,
   };
 
-  const baseAmount = planType === "annual" ? ANNUAL_BASE : MONTHLY_BASE;
+  const baseAmount = planPrice(planType);
   const rate       = rateMap[phase];
   const amount     = Math.round(baseAmount * rate * 100) / 100;
 

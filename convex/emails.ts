@@ -1,5 +1,6 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
+import { PLAN_PRICES } from "./pricing";
 
 const RESEND_KEY  = process.env.RESEND_API_KEY ?? "";
 const FROM_EMAIL  = process.env.RESEND_FROM_EMAIL ?? "Loatycard <onboarding@resend.dev>";
@@ -18,8 +19,8 @@ export const sendWelcomeEmail = internalAction({
     if (!RESEND_KEY) return;
 
     const planLabel = args.planType === "annual"
-      ? "Jahresabo (€389 / Jahr)"
-      : "Monatsabo (€39 / Monat)";
+      ? `Jahresabo (€${PLAN_PRICES.annual} / Jahr)`
+      : `Monatsabo (€${PLAN_PRICES.monthly} / Monat)`;
 
     const extras = [
       args.wantsDesign      && "Custom Design",

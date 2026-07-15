@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveCommissionRule } from "./commissionEngine";
+import { planPrice } from "./pricing";
 import { derivePasswordHash, newSalt } from "./passwords";
 
 function requireAdmin(secret: string) {
@@ -438,7 +439,7 @@ export const getEarningsSummary = query({
     // Umsatz = alle Zahlungen die eingegangen sind
     let revenueTotal = 0;
     for (const c of contracts) {
-      const amount = c.planType === "annual" ? 389 : 39;
+      const amount = planPrice(c.planType);
       revenueTotal += c.paymentCount * amount;
     }
 
