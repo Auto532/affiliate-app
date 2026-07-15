@@ -82,6 +82,22 @@ export const autoRecordPayment = internalMutation({
   },
 });
 
+// ── Test: Zahlung simulieren (nur wenn ENABLE_TEST_PAYMENT=true) ─────────────
+
+export const simulateTestPayment = action({
+  args: { paymentToken: v.string() },
+  handler: async (ctx, args): Promise<void> => {
+    if (process.env.ENABLE_TEST_PAYMENT !== "true") throw new Error("Test-Modus nicht aktiv");
+    const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
+    if (!info) throw new Error("Ungültiger Zahlungslink");
+    await ctx.runMutation(internal.payments.autoRecordPayment, {
+      shopContractId: info.contractId,
+      paymentRef: `test-${Date.now()}`,
+      method: "test",
+    });
+  },
+});
+
 // ── Stripe: Checkout-Session erstellen ────────────────────────────────────────
 
 export const createStripeCheckout = action({
