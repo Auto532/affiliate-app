@@ -9,6 +9,27 @@ function requireAdmin(secret: string) {
   if (secret !== ADMIN_SECRET) throw new Error("Kein Zugriff");
 }
 
+// ── Alle Daten löschen (Test-Reset) ──────────────────────────────────────────
+
+export const clearAllData = mutation({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const tables = [
+      "commissions", "payouts", "shopContracts", "shopLeads",
+      "affiliateSessions", "adminSessions", "affiliateInvites",
+      "auditLog", "affiliates",
+    ] as const;
+    for (const table of tables) {
+      const docs = await ctx.db.query(table).collect();
+      for (const doc of docs) {
+        await ctx.db.delete(doc._id);
+      }
+    }
+    return "Affiliate-Daten gelöscht";
+  },
+});
+
 // ── Partner-Einladungslink generieren ─────────────────────────────────────────
 
 export const generateAffiliateInvite = mutation({
