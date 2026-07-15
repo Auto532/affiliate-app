@@ -33,14 +33,14 @@ export default function NewShopPage() {
     if (!token) return;
     setError(""); setLoading(true);
     try {
-      await submitLead({
+      const leadId = await submitLead({
         token, planType,
         ...form,
         ownerPhone:   form.ownerPhone   || undefined,
         businessType: form.businessType || undefined,
         city:         form.city         || undefined,
       });
-      router.push("/dashboard/shops");
+      router.push(`/dashboard/shops/${leadId}`);
     } catch (err: any) {
       setError(err.message ?? "Fehler beim Einreichen");
     } finally { setLoading(false); }
