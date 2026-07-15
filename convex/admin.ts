@@ -1,7 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveCommissionRule } from "./commissionEngine";
-import { planPrice } from "./pricing";
 import { derivePasswordHash, newSalt } from "./passwords";
 
 function requireAdmin(secret: string) {
@@ -436,12 +435,9 @@ export const getEarningsSummary = query({
       ctx.db.query("commissions").collect(),
     ]);
 
-    // Umsatz = alle Zahlungen die eingegangen sind
-    let revenueTotal = 0;
-    for (const c of contracts) {
-      const amount = planPrice(c.planType);
-      revenueTotal += c.paymentCount * amount;
-    }
+    // Umsatz = tatsächlich eingenommene Beträge (nach Rabatt). Jede Zahlung erzeugt
+    // genau eine Commission mit paidAmount; ältere ohne paidAmount → baseAmount (Listenpreis).
+    const revenueTotal = commissions.reduce((s, c) => s + ((c as any).paidAmount ?? c.baseAmount), 0);
 
     // Provisionen nach Status
     const commPending   = commissions.filter(c => c.status === "pending")  .reduce((s, c) => s + c.amount, 0);
@@ -555,6 +551,22 @@ export const rejectProfileChange = mutation({
       entityType: "affiliate",
       entityId:   args.affiliateId,
       action:     "profile_change_rejected",
+      actorType:  "admin",
+    });
+  },
+});
+
+// ── Rabatt-Berechtigung pro Partner (Admin-Toggle) ───────────────────────────
+
+export const setDiscountEligible = mutation({
+  args: { adminSecret: v.string(), affiliateId: v.id("affiliates"), eligible: v.boolean() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    await ctx.db.patch(args.affiliateId, { discountEligible: args.eligible });
+    await ctx.db.insert("auditLog", {
+      entityType: "affiliate",
+      entityId:   args.affiliateId,
+      action:     args.eligible ? "discount_enabled" : "discount_disabled",
       actorType:  "admin",
     });
   },

@@ -16,9 +16,29 @@ export default function PayPage() {
   const createStripe          = useAction(api.payments.createStripeCheckout);
   const createPayPalOrder     = useAction(api.payments.createPayPalOrder);
   const capturePayPalOrder    = useAction(api.payments.capturePayPalOrder);
+  const applyDiscount         = useAction(api.payments.applyDiscountCode);
 
   const [stripeLoading, setStripeLoading] = useState(false);
   const [error, setError]                 = useState("");
+  const [code, setCode]                   = useState("");
+  const [discountLoading, setDiscountLoading] = useState(false);
+  const [discountMsg, setDiscountMsg]     = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleApplyDiscount = async () => {
+    if (!code.trim()) return;
+    setDiscountLoading(true); setDiscountMsg(null);
+    try {
+      // Nur der eingetippte String geht raus — der Server entscheidet über den Rabatt.
+      const res = await applyDiscount({ paymentToken: token, code });
+      if (res.valid) {
+        setDiscountMsg({ ok: true, text: `${res.label} aktiviert — du zahlst €${res.discountedPrice} statt €${res.normalPrice}.` });
+      } else {
+        setDiscountMsg({ ok: false, text: res.reason ?? "Code ungültig" });
+      }
+    } catch (e: any) {
+      setDiscountMsg({ ok: false, text: e.message ?? "Fehler" });
+    } finally { setDiscountLoading(false); }
+  };
 
   if (info === undefined) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -84,10 +104,25 @@ export default function PayPage() {
             <p className="font-semibold text-[#f2ede4]">{info.shopName}</p>
             <p className="text-xs text-[rgba(242,237,228,.4)]">Loatycard {planLabel}</p>
           </div>
-          <p className="text-2xl font-bold text-[#c9a227]">€{info.amount}</p>
+          <div className="text-right">
+            {info.firstYearDiscount ? (
+              <>
+                <p className="text-xs text-[rgba(242,237,228,.35)] line-through">€{info.normalPrice}</p>
+                <p className="text-2xl font-bold text-[#c9a227]">€{info.payableAmount}</p>
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-[#c9a227]">€{info.payableAmount}</p>
+            )}
+          </div>
         </div>
+        {info.firstYearDiscount && (
+          <div className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold"
+            style={{ background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.3)", color: "#4ade80" }}>
+            −{Math.round(info.firstYearDiscount * 100)}% {info.discountCode ?? "Rabatt"} · nur 1. Jahr
+          </div>
+        )}
         {info.planType === "annual" && (
-          <p className="text-[10px] text-[rgba(242,237,228,.3)]">Einmalige Jahreszahlung · automatisch verlängerbar</p>
+          <p className="text-[10px] text-[rgba(242,237,228,.3)]">Einmalige Jahreszahlung · automatisch verlängerbar{info.firstYearDiscount ? " (ab Jahr 2 zum Normalpreis)" : ""}</p>
         )}
         {info.planType === "monthly" && (
           <p className="text-[10px] text-[rgba(242,237,228,.3)]">Monatliche Zahlung · jederzeit kündbar</p>
@@ -96,6 +131,28 @@ export default function PayPage() {
           <p className="text-[10px] text-[rgba(242,237,228,.3)]">Zahlung #{info.paymentCount + 1}</p>
         )}
       </div>
+
+      {/* Rabattcode */}
+      {info.paymentCount === 0 && (
+        <div className="space-y-2">
+          <div className="flex gap-2">
+            <input
+              value={code}
+              onChange={e => setCode(e.target.value)}
+              placeholder="Rabattcode"
+              className="flex-1 px-4 py-3 bg-[#17150f] border border-[rgba(255,255,255,.08)] rounded-xl text-[#f2ede4] placeholder-[rgba(242,237,228,.3)] focus:outline-none focus:border-[rgba(201,162,39,.4)] text-sm uppercase tracking-wider"
+            />
+            <button onClick={handleApplyDiscount} disabled={discountLoading || !code.trim()}
+              className="px-5 py-3 rounded-xl text-sm font-semibold text-[#0d0c0a] disabled:opacity-40"
+              style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>
+              {discountLoading ? "..." : "Einlösen"}
+            </button>
+          </div>
+          {discountMsg && (
+            <p className={`text-xs ${discountMsg.ok ? "text-green-400" : "text-red-400"}`}>{discountMsg.text}</p>
+          )}
+        </div>
+      )}
 
       {/* Stripe */}
       <div className="space-y-3">

@@ -4,6 +4,13 @@ import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
 import { planPrice } from "./pricing";
+import { lookupDiscount } from "./discounts";
+
+// Provisions-Basis: "paid" = Provision auf tatsächlich gezahlten Betrag (Default),
+// "full" = auf den vollen Listenpreis. Serverseitiger Flag, nie aus dem Client.
+function commissionBase(): "paid" | "full" {
+  return process.env.COMMISSION_BASE === "full" ? "full" : "paid";
+}
 
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? "";
 const STRIPE_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -34,13 +41,26 @@ export const getByPaymentToken = query({
       .unique();
     if (!contract) return null;
     const lead = await ctx.db.get(contract.shopLeadId);
+
+    const normalPrice = planPrice(contract.planType);
+    // Zu zahlender Betrag der ERSTEN Periode (Jahr 1): rabattiert falls Rabatt gesetzt.
+    const payableAmount = contract.firstYearDiscount
+      ? (contract.discountedPrice ?? Math.round(normalPrice * (1 - contract.firstYearDiscount) * 100) / 100)
+      : normalPrice;
+
     return {
       contractId: contract._id,
       planType:   contract.planType,
       shopName:   lead?.shopName ?? "Loatycard Shop",
       ownerName:  lead?.ownerName ?? "",
-      amount:     planPrice(contract.planType),
+      amount:     normalPrice,     // Listenpreis (Referenz)
+      payableAmount,               // tatsächlich zu zahlen (Jahr 1)
       paymentCount: contract.paymentCount,
+      // Rabatt-Status (nur Anzeige — verbindlich ist der Server)
+      discountCode:      contract.discountCode ?? null,
+      firstYearDiscount: contract.firstYearDiscount ?? null,
+      normalPrice,
+      discountedPrice:   contract.discountedPrice ?? null,
     };
   },
 });
@@ -78,7 +98,28 @@ export const autoRecordPayment = internalMutation({
       .unique();
     if (existing) return null;
 
-    const rule = resolveCommissionRule(contract.planType, newCount);
+    const rule = resolveCommissionRule(contract.planType, newCount); // liefert phase + rate
+
+    // Tatsächlich eingenommener Betrag DIESER Zahlung.
+    // Rabatt gilt nur für die erste Abrechnungsperiode (Zahlung #1); ab #2 Normalpreis.
+    const listPrice  = planPrice(contract.planType);
+    const isFirst    = newCount === 1;
+    const paidAmount = (isFirst && contract.firstYearDiscount)
+      ? (contract.discountedPrice ?? Math.round(listPrice * (1 - contract.firstYearDiscount) * 100) / 100)
+      : listPrice;
+
+    // Provisions-Basis per Flag: "paid" (Default) = gezahlter Betrag, "full" = Listenpreis.
+    // Immer aus echten Server-Werten, nie aus Client-Input.
+    const base = commissionBase() === "full" ? listPrice : paidAmount;
+    let amount = Math.round(base * rule.rate * 100) / 100;
+
+    // Sicherung: Provision darf nie höher sein als der tatsächlich eingenommene Betrag
+    // (kein Minusgeschäft pro Sale). Falls doch → deckeln + loggen.
+    let capped = false;
+    if (amount > paidAmount) {
+      capped = true;
+      amount = paidAmount;
+    }
 
     const commissionId = await ctx.db.insert("commissions", {
       affiliateId:    contract.affiliateId,
@@ -87,22 +128,38 @@ export const autoRecordPayment = internalMutation({
       phase:          rule.phase,
       planType:       contract.planType,
       rate:           rule.rate,
-      baseAmount:     rule.baseAmount,
-      amount:         rule.amount,
+      baseAmount:     base,
+      amount,
       status:         "pending",
       triggeredAt:    Date.now(),
       paymentRef:     args.paymentRef,
+      paidAmount,
+      commissionBase: commissionBase(),
     });
 
     await ctx.db.patch(args.shopContractId, { paymentCount: newCount });
 
+    const discountNote = (isFirst && contract.firstYearDiscount)
+      ? ` · Rabatt ${Math.round(contract.firstYearDiscount * 100)}% (gezahlt €${paidAmount})`
+      : "";
     await ctx.db.insert("auditLog", {
       entityType: "commission",
       entityId:   commissionId,
       action:     "auto_payment",
       actorType:  "system",
-      note:       `${args.method} · Ref: ${args.paymentRef} · #${newCount} · €${rule.amount}`,
+      note:       `${args.method} · Ref: ${args.paymentRef} · #${newCount} · Provision €${amount} (${commissionBase()})${discountNote}`,
     });
+
+    if (capped) {
+      console.warn(`[commission-cap] Provision auf €${amount} gedeckelt (paidAmount €${paidAmount}), contract ${args.shopContractId} #${newCount}`);
+      await ctx.db.insert("auditLog", {
+        entityType: "commission",
+        entityId:   commissionId,
+        action:     "commission_capped",
+        actorType:  "system",
+        note:       `Provision auf gezahlten Betrag €${paidAmount} gedeckelt (kein Minusgeschäft)`,
+      });
+    }
 
     return { paymentNumber: newCount };
   },
@@ -229,7 +286,87 @@ export const getExpectedAmount = internalQuery({
   handler: async (ctx, args): Promise<{ amount: number } | null> => {
     const contract = await ctx.db.get(args.shopContractId);
     if (!contract) return null;
-    return { amount: planPrice(contract.planType) };
+    // Zu zahlen (Jahr 1): rabattierter Betrag falls gesetzt, sonst Listenpreis.
+    const normal = planPrice(contract.planType);
+    const amount = contract.firstYearDiscount
+      ? (contract.discountedPrice ?? Math.round(normal * (1 - contract.firstYearDiscount) * 100) / 100)
+      : normal;
+    return { amount };
+  },
+});
+
+// ── Rabattcode (Testmodus) ────────────────────────────────────────────────────
+
+export const getContractForDiscount = internalQuery({
+  args: { paymentToken: v.string() },
+  handler: async (ctx, args) => {
+    const contract = await ctx.db
+      .query("shopContracts")
+      .withIndex("by_paymentToken", q => q.eq("paymentToken", args.paymentToken))
+      .unique();
+    if (!contract) return null;
+    const affiliate = await ctx.db.get(contract.affiliateId);
+    return {
+      contractId:                contract._id,
+      planType:                  contract.planType,
+      paymentCount:              contract.paymentCount,
+      affiliateDiscountEligible: affiliate?.discountEligible === true,
+    };
+  },
+});
+
+export const storeDiscount = internalMutation({
+  args: {
+    shopContractId:    v.id("shopContracts"),
+    code:              v.string(),
+    firstYearDiscount: v.number(),
+    normalPrice:       v.number(),
+    discountedPrice:   v.number(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.shopContractId, {
+      discountCode:      args.code,
+      firstYearDiscount: args.firstYearDiscount,
+      normalPrice:       args.normalPrice,
+      discountedPrice:   args.discountedPrice,
+    });
+  },
+});
+
+// Serverseitige Rabatt-Validierung. Client schickt NUR den String; ob & wieviel
+// Rabatt gilt, entscheidet ausschließlich der Server (Code + Partner-Eligibility).
+export const applyDiscountCode = action({
+  args: { paymentToken: v.string(), code: v.string() },
+  handler: async (ctx, args): Promise<{
+    valid: boolean; reason?: string;
+    firstYearDiscount?: number; normalPrice?: number; discountedPrice?: number; label?: string;
+  }> => {
+    const info = await ctx.runQuery(internal.payments.getContractForDiscount, { paymentToken: args.paymentToken });
+    if (!info)                 return { valid: false, reason: "Ungültiger Zahlungslink" };
+    if (info.paymentCount > 0) return { valid: false, reason: "Bereits bezahlt" };
+
+    const discount = lookupDiscount(args.code);
+    if (!discount)                       return { valid: false, reason: "Code ungültig" };
+    if (!info.affiliateDiscountEligible) return { valid: false, reason: "Für diesen Vertrag nicht verfügbar" };
+
+    const normalPrice     = planPrice(info.planType);
+    const discountedPrice = Math.round(normalPrice * (1 - discount.firstYearDiscount) * 100) / 100;
+
+    await ctx.runMutation(internal.payments.storeDiscount, {
+      shopContractId:    info.contractId,
+      code:              args.code.trim().toUpperCase(),
+      firstYearDiscount: discount.firstYearDiscount,
+      normalPrice,
+      discountedPrice,
+    });
+
+    return {
+      valid: true,
+      firstYearDiscount: discount.firstYearDiscount,
+      normalPrice,
+      discountedPrice,
+      label: discount.label,
+    };
   },
 });
 

@@ -33,6 +33,9 @@ export default defineSchema({
     bankBic:       v.optional(v.string()),
     bankName:      v.optional(v.string()),
     notes:         v.optional(v.string()),
+    // Rabatt: nur wenn der Admin diesen Partner freigeschaltet hat, greifen Rabattcodes
+    // für seine Shops (bewusst NICHT automatisch — siehe convex/discounts.ts).
+    discountEligible: v.optional(v.boolean()),
     // Freigabepflichtige Profiländerung (sensible Felder), wartet auf Admin-Freigabe.
     pendingProfile: v.optional(v.object({
       name:        v.optional(v.string()),
@@ -118,6 +121,14 @@ export default defineSchema({
     canceledAt:    v.optional(v.number()),
     paymentToken:  v.optional(v.string()),
 
+    // Rabatt auf das erste Jahr (Testmodus). An die ERSTE Abrechnungsperiode
+    // gekoppelt (paymentNumber === 1) → bildet später Stripe coupon duration:"once" ab.
+    // Ab Zahlung 2 (Verlängerung) gilt automatisch normalPrice.
+    discountCode:      v.optional(v.string()),
+    firstYearDiscount: v.optional(v.number()),  // z.B. 0.5
+    normalPrice:       v.optional(v.number()),  // Listenpreis
+    discountedPrice:   v.optional(v.number()),  // tatsächlich zu zahlen (Jahr 1)
+
     // Stripe Subscription (wird gesetzt sobald STRIPE_SUBSCRIPTION_MODE aktiv)
     stripeSubscriptionId: v.optional(v.string()),
     stripeCustomerId:     v.optional(v.string()),
@@ -158,6 +169,10 @@ export default defineSchema({
     // Referenz der auslösenden Zahlung (Stripe invoice/payment_intent, PayPal capture)
     // — Grundlage für Replay-/Doppelverarbeitungs-Schutz
     paymentRef:      v.optional(v.string()),
+    // Tatsächlich eingenommener Betrag dieser Zahlung (nach Rabatt) + Basis der
+    // Provisionsberechnung. Provision ist auf paidAmount gedeckelt (kein Minusgeschäft).
+    paidAmount:      v.optional(v.number()),
+    commissionBase:  v.optional(v.union(v.literal("paid"), v.literal("full"))),
   })
     .index("by_affiliate",    ["affiliateId"])
     .index("by_contract",     ["shopContractId"])
