@@ -179,11 +179,11 @@ export default function PartnerInvitePage() {
               )}
             </div>
             {[
-              { k: "company",     label: "Firmenname (falls Gewerbe)",  placeholder: ""             },
-              { k: "dateOfBirth", label: "Geburtsdatum *",              placeholder: "15.03.1990"   },
-              { k: "taxId",       label: "Steuernummer *",              placeholder: "123/456/78901" },
-              { k: "vatId",       label: "USt-IdNr. (falls vorhanden)", placeholder: "DE123456789"  },
-            ].map(({ k, label, placeholder }) => (
+              { k: "company",     label: "Firmenname",   placeholder: "",              onlyBusiness: true  },
+              { k: "dateOfBirth", label: "Geburtsdatum", placeholder: "15.03.1990",   onlyBusiness: false },
+              { k: "taxId",       label: "Steuernummer", placeholder: "123/456/78901", onlyBusiness: true  },
+              { k: "vatId",       label: "USt-IdNr.",    placeholder: "DE123456789",  onlyBusiness: true  },
+            ].filter(f => !f.onlyBusiness || businessType === "business").map(({ k, label, placeholder }) => (
               <div key={k}>
                 <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">{label}</label>
                 <input type="text" value={(form as any)[k]} onChange={set(k)} placeholder={placeholder}
