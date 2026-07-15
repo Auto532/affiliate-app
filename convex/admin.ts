@@ -1,12 +1,14 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveCommissionRule } from "./commissionEngine";
-
-const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "changeme";
-
+import { derivePasswordHash, newSalt } from "./passwords";
 
 function requireAdmin(secret: string) {
-  if (secret !== ADMIN_SECRET) throw new Error("Kein Zugriff");
+  const expected = process.env.ADMIN_SECRET;
+  // Kein unsicherer Default: ist das Secret nicht gesetzt, wird jeder Zugriff
+  // verweigert (statt auf ein rate-bares "changeme" zurückzufallen).
+  if (!expected) throw new Error("ADMIN_SECRET nicht gesetzt");
+  if (secret !== expected) throw new Error("Kein Zugriff");
 }
 
 // ── Alle Daten löschen (Test-Reset) ──────────────────────────────────────────
@@ -85,10 +87,12 @@ export const createAffiliate = mutation({
     }
     if (!referralCode) throw new Error("Referral-Code konnte nicht generiert werden");
 
+    const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {
       name:         args.name,
       email:        args.email,
-      passwordHash: args.passwordHash,
+      passwordHash: await derivePasswordHash(args.passwordHash, salt),
+      passwordSalt: salt,
       referralCode,
       status:       "active",
       phone:        args.phone,

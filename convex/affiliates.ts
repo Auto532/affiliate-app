@@ -1,5 +1,32 @@
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { derivePasswordHash, newSalt, timingSafeEqual } from "./passwords";
+import { assertNotLocked, recordFailure, clearFailures } from "./rateLimit";
+
+// Verifiziert das (client-seitig SHA-256-gehashte) Passwort gegen den gespeicherten
+// gesalzenen Hash. Legacy-Accounts (ohne Salt) werden bei korrektem Passwort
+// transparent auf das gesalzene Schema hochgezogen.
+async function verifyPassword(
+  ctx: MutationCtx,
+  affiliate: Doc<"affiliates">,
+  clientHash: string,
+): Promise<boolean> {
+  if (affiliate.passwordSalt) {
+    const expected = await derivePasswordHash(clientHash, affiliate.passwordSalt);
+    return timingSafeEqual(expected, affiliate.passwordHash);
+  }
+  // Legacy: unsaltetes SHA-256 direkt vergleichen …
+  if (!timingSafeEqual(affiliate.passwordHash, clientHash)) return false;
+  // … und bei Erfolg auf gesalzenen PBKDF2-Hash migrieren.
+  const salt = newSalt();
+  await ctx.db.patch(affiliate._id, {
+    passwordSalt: salt,
+    passwordHash: await derivePasswordHash(clientHash, salt),
+  });
+  return true;
+}
 
 // ── Registrierung ─────────────────────────────────────────────────────────────
 
@@ -30,10 +57,12 @@ export const register = mutation({
       await ctx.db.query("affiliates").withIndex("by_referralCode", q => q.eq("referralCode", code)).unique()
     );
 
+    const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {
       name:         args.name,
       email:        args.email,
-      passwordHash: args.passwordHash,
+      passwordHash: await derivePasswordHash(args.passwordHash, salt),
+      passwordSalt: salt,
       referralCode: code,
       status:       "pending",
       businessType: args.businessType,
@@ -56,28 +85,37 @@ export const register = mutation({
 export const login = mutation({
   args: { email: v.string(), passwordHash: v.string() },
   handler: async (ctx, args) => {
+    const throttleKey = `login:${args.email.trim().toLowerCase()}`;
+    const throttle = await assertNotLocked(ctx, throttleKey);
+
     const affiliate = await ctx.db
       .query("affiliates")
       .withIndex("by_email", q => q.eq("email", args.email))
       .unique();
 
-    if (!affiliate || affiliate.passwordHash !== args.passwordHash)
+    const ok = affiliate !== null && await verifyPassword(ctx, affiliate, args.passwordHash);
+    if (!ok) {
+      await recordFailure(ctx, throttleKey, throttle);
       throw new Error("Ungültige Zugangsdaten");
-    if (affiliate.status === "pending")
+    }
+    await clearFailures(ctx, throttle);
+
+    const aff = affiliate!;
+    if (aff.status === "pending")
       throw new Error("Dein Account wartet noch auf Freigabe");
-    if (affiliate.status === "suspended")
+    if (aff.status === "suspended")
       throw new Error("Dein Account wurde gesperrt");
 
     const token = crypto.randomUUID();
     const now   = Date.now();
     await ctx.db.insert("affiliateSessions", {
-      affiliateId: affiliate._id,
+      affiliateId: aff._id,
       token,
       createdAt:   now,
       expiresAt:   now + 30 * 24 * 60 * 60 * 1000, // 30 Tage
     });
 
-    return { token, affiliate };
+    return { token, affiliate: aff };
   },
 });
 
@@ -164,10 +202,12 @@ export const acceptAffiliateInvite = mutation({
     }
     if (!code) throw new Error("Code-Generierung fehlgeschlagen");
 
+    const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {
       name:         args.name,
       email:        args.email,
-      passwordHash: args.passwordHash,
+      passwordHash: await derivePasswordHash(args.passwordHash, salt),
+      passwordSalt: salt,
       referralCode: code,
       status:       "pending",
       phone:        args.phone,

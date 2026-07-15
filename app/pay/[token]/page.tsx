@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
+import TestPaymentButton from "./TestPaymentButton"; // ⚠️ TEST-ONLY — vor Live-Schaltung entfernen
 
 export default function PayPage() {
   const params = useParams();
@@ -15,22 +16,9 @@ export default function PayPage() {
   const createStripe          = useAction(api.payments.createStripeCheckout);
   const createPayPalOrder     = useAction(api.payments.createPayPalOrder);
   const capturePayPalOrder    = useAction(api.payments.capturePayPalOrder);
-  const simulatePayment       = useAction(api.payments.simulateTestPayment);
 
   const [stripeLoading, setStripeLoading] = useState(false);
-  const [testLoading, setTestLoading]     = useState(false);
   const [error, setError]                 = useState("");
-
-  const handleTestPayment = async () => {
-    setTestLoading(true); setError("");
-    try {
-      await simulatePayment({ paymentToken: token });
-      router.replace("/pay/success?method=test");
-    } catch (e: any) {
-      setError(e.message ?? "Fehler");
-      setTestLoading(false);
-    }
-  };
 
   if (info === undefined) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -148,8 +136,9 @@ export default function PayPage() {
                   return orderId;
                 }}
                 onApprove={async (data) => {
-                  const { contractId } = await createPayPalOrder({ paymentToken: token });
-                  await capturePayPalOrder({ orderId: data.orderID, contractId });
+                  // Vertrag + Betrag werden serverseitig aus der Order (custom_id)
+                  // abgeleitet und geprüft — kein contractId-Input vom Client mehr.
+                  await capturePayPalOrder({ orderId: data.orderID });
                   router.replace("/pay/success?method=paypal");
                 }}
                 onError={() => setError("PayPal-Zahlung fehlgeschlagen")}
@@ -163,12 +152,7 @@ export default function PayPage() {
         <p className="text-center text-red-400 text-sm">{error}</p>
       )}
 
-      {/* !! VOR LAUNCH LÖSCHEN: Test-Button + handleTestPayment + simulatePayment !! */}
-      <button onClick={handleTestPayment} disabled={testLoading}
-          className="w-full py-3 rounded-2xl font-semibold text-sm disabled:opacity-50 transition-opacity"
-          style={{ background: "rgba(255,255,255,.05)", border: "1px dashed rgba(255,255,255,.15)", color: "rgba(242,237,228,.4)" }}>
-          {testLoading ? "Simuliere..." : "🧪 Test-Zahlung simulieren"}
-        </button>
+      <TestPaymentButton token={token} />{/* ⚠️ TEST-ONLY — vor Live-Schaltung entfernen */}
 
       <p className="text-center text-[10px] text-[rgba(242,237,228,.2)]">
         Sichere Zahlung · SSL-verschlüsselt · Loatycard GmbH

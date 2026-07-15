@@ -8,6 +8,7 @@ export default defineSchema({
     name:          v.string(),
     email:         v.string(),
     passwordHash:  v.string(),
+    passwordSalt:  v.optional(v.string()),  // gesetzt = gesalzener PBKDF2-Hash (C3); fehlt = Legacy-SHA-256
     referralCode:  v.string(),          // z.B. "YN-4829", unique
     status:        v.union(
       v.literal("pending"),             // wartet auf Admin-Freigabe
@@ -142,12 +143,17 @@ export default defineSchema({
     triggeredAt:     v.number(),         // wann Zahlung des Shops einging
     confirmedAt:     v.optional(v.number()),
     payoutId:        v.optional(v.id("payouts")),
+    // Referenz der auslösenden Zahlung (Stripe invoice/payment_intent, PayPal capture)
+    // — Grundlage für Replay-/Doppelverarbeitungs-Schutz
+    paymentRef:      v.optional(v.string()),
   })
     .index("by_affiliate",    ["affiliateId"])
     .index("by_contract",     ["shopContractId"])
     .index("by_status",       ["status"])
     // Duplikat-Schutz: contract + paymentNumber muss unique sein
-    .index("by_contract_payment", ["shopContractId", "paymentNumber"]),
+    .index("by_contract_payment", ["shopContractId", "paymentNumber"])
+    // Idempotenz-Schutz gegen doppelte Webhook-/Capture-Zustellungen
+    .index("by_paymentRef",   ["paymentRef"]),
 
   // ── Payouts ─────────────────────────────────────────────────────────────────
   payouts: defineTable({
@@ -202,4 +208,13 @@ export default defineSchema({
   })
     .index("by_token",     ["token"])
     .index("by_affiliate", ["affiliateId"]),
+
+  // ── Auth-Throttle (Brute-Force-Schutz, C2) ───────────────────────────────────
+  authThrottle: defineTable({
+    key:         v.string(),           // z.B. "login:mail@x.de"
+    count:       v.number(),           // Fehlversuche im aktuellen Fenster
+    windowStart: v.number(),
+    lockedUntil: v.optional(v.number()),
+  })
+    .index("by_key", ["key"]),
 });

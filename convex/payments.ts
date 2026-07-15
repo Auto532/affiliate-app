@@ -56,6 +56,17 @@ export const autoRecordPayment = internalMutation({
     const contract = await ctx.db.get(args.shopContractId);
     if (!contract || contract.status !== "active") return null;
 
+    // Idempotenz auf der Zahlungs-Referenz: Stripe liefert Webhook-Events
+    // garantiert mindestens einmal (oft doppelt). Ohne diesen Check würde eine
+    // zweite Zustellung derselben Zahlung eine zweite Provision erzeugen, weil
+    // paymentCount bereits erhöht wurde und der (contract,paymentNumber)-Check
+    // dann nicht mehr greift.
+    const alreadyProcessed = await ctx.db
+      .query("commissions")
+      .withIndex("by_paymentRef", q => q.eq("paymentRef", args.paymentRef))
+      .first();
+    if (alreadyProcessed) return null;
+
     const newCount = contract.paymentCount + 1;
 
     const existing = await ctx.db
@@ -79,6 +90,7 @@ export const autoRecordPayment = internalMutation({
       amount:         rule.amount,
       status:         "pending",
       triggeredAt:    Date.now(),
+      paymentRef:     args.paymentRef,
     });
 
     await ctx.db.patch(args.shopContractId, { paymentCount: newCount });
@@ -209,21 +221,14 @@ export const provisionShop = internalAction({
   },
 });
 
-// !! VOR LAUNCH KOMPLETT LÖSCHEN: simulateTestPayment + Button in app/pay/[token]/page.tsx !!
+// ── Interne Query: erwarteter Zahlungsbetrag für einen Vertrag ────────────────
 
-export const simulateTestPayment = action({
-  args: { paymentToken: v.string() },
-  handler: async (ctx, args): Promise<void> => {
-    const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
-    if (!info) throw new Error("Ungültiger Zahlungslink");
-    const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
-      shopContractId: info.contractId,
-      paymentRef: `test-${Date.now()}`,
-      method: "test",
-    });
-    if (result?.paymentNumber === 1) {
-      await ctx.runAction(internal.payments.provisionShop, { shopContractId: info.contractId });
-    }
+export const getExpectedAmount = internalQuery({
+  args: { shopContractId: v.id("shopContracts") },
+  handler: async (ctx, args): Promise<{ amount: number } | null> => {
+    const contract = await ctx.db.get(args.shopContractId);
+    if (!contract) return null;
+    return { amount: contract.planType === "annual" ? 389 : 39 };
   },
 });
 
@@ -390,6 +395,10 @@ export const createPayPalOrder = action({
         purchase_units: [{
           amount:      { currency_code: "EUR", value: info.amount.toFixed(2) },
           description: `Loatycard ${info.planType === "annual" ? "Jahresabo" : "Monatsabo"} · ${info.shopName}`,
+          // Bindet die Order serverseitig an den Vertrag des Zahlungstokens.
+          // Beim Capture wird ausschließlich diese custom_id verwendet — der
+          // Client kann die Zahlung nicht auf einen fremden/teureren Vertrag umlenken.
+          custom_id:   info.contractId,
         }],
       }),
     });
@@ -403,8 +412,7 @@ export const createPayPalOrder = action({
 
 export const capturePayPalOrder = action({
   args: {
-    orderId:    v.string(),
-    contractId: v.id("shopContracts"),
+    orderId: v.string(),
   },
   handler: async (ctx, args): Promise<{ status: string }> => {
     const token = await getPayPalToken();
@@ -414,18 +422,37 @@ export const capturePayPalOrder = action({
     });
 
     const capture = await res.json();
+    if (capture.status !== "COMPLETED") return { status: capture.status ?? "FAILED" };
 
-    if (capture.status === "COMPLETED") {
-      const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
-        shopContractId: args.contractId,
-        paymentRef:     args.orderId,
-        method:         "paypal",
-      });
-      if (result?.paymentNumber === 1) {
-        await ctx.runAction(internal.payments.provisionShop, { shopContractId: args.contractId });
-      }
+    // Vertrag ausschließlich aus der serverseitig gesetzten custom_id ableiten
+    // (nicht aus Client-Input) und den tatsächlich gecapturten Betrag prüfen.
+    const pu             = capture.purchase_units?.[0];
+    const contractId     = pu?.custom_id as string | undefined;
+    const capturedAmount = pu?.payments?.captures?.[0]?.amount?.value as string | undefined;
+    const captureId      = pu?.payments?.captures?.[0]?.id as string | undefined;
+    if (!contractId || !capturedAmount) {
+      throw new Error("Zahlung konnte keinem Vertrag zugeordnet werden");
     }
 
-    return { status: capture.status };
+    const expected = await ctx.runQuery(internal.payments.getExpectedAmount, {
+      shopContractId: contractId as Id<"shopContracts">,
+    });
+    if (!expected) throw new Error("Vertrag nicht gefunden");
+    if (Number(capturedAmount) + 0.001 < expected.amount) {
+      throw new Error("Gezahlter Betrag entspricht nicht dem Vertragspreis");
+    }
+
+    const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
+      shopContractId: contractId as Id<"shopContracts">,
+      paymentRef:     captureId ?? args.orderId,
+      method:         "paypal",
+    });
+    if (result?.paymentNumber === 1) {
+      await ctx.runAction(internal.payments.provisionShop, {
+        shopContractId: contractId as Id<"shopContracts">,
+      });
+    }
+
+    return { status: "COMPLETED" };
   },
 });

@@ -2,8 +2,6 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
 
-const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
-
 const http = httpRouter();
 
 http.route({
@@ -22,20 +20,10 @@ http.route({
   }),
 });
 
-http.route({
-  path:   "/admin/earnings",
-  method: "GET",
-  handler: httpAction(async (ctx, req) => {
-    const secret = new URL(req.url).searchParams.get("secret") ?? "";
-    if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    const data = await ctx.runQuery(api.admin.getEarningsSummary, { adminSecret: secret });
-    return new Response(JSON.stringify(data), {
-      status:  200,
-      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-    });
-  }),
-});
+// Hinweis: Der frühere GET /admin/earnings (Secret im URL-Query + Wildcard-CORS)
+// wurde entfernt. Die Einnahmen werden jetzt über die reguläre, secret-geschützte
+// Query api.admin.getEarningsSummary via Convex /api/query abgerufen — mit dem
+// zur Laufzeit eingegebenen Admin-PIN, nicht mit einem ins Client-Bundle
+// gebackenen NEXT_PUBLIC_-Secret.
 
 export default http;
