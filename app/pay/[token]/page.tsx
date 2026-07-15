@@ -25,7 +25,7 @@ export default function PayPage() {
     setTestLoading(true); setError("");
     try {
       await simulatePayment({ paymentToken: token });
-      router.push("/pay/success?method=test");
+      router.replace("/pay/success?method=test");
     } catch (e: any) {
       setError(e.message ?? "Fehler");
       setTestLoading(false);
@@ -43,6 +43,25 @@ export default function PayPage() {
       <div className="text-center space-y-3">
         <p className="text-xl font-bold text-[#f2ede4]">Ungültiger Zahlungslink</p>
         <p className="text-sm text-[rgba(242,237,228,.4)]">Dieser Link ist nicht gültig oder abgelaufen.</p>
+      </div>
+    </div>
+  );
+
+  if (info.paymentCount > 0) return (
+    <div className="min-h-screen flex items-center justify-center px-4">
+      <div className="w-full max-w-sm text-center space-y-5">
+        <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
+          style={{ background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.3)" }}>
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-[#f2ede4]">Zahlung abgeschlossen</h2>
+          <p className="text-sm text-[rgba(242,237,228,.5)] mt-2">
+            Deine Loatycard-Stempelkarte wird eingerichtet.
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -131,7 +150,7 @@ export default function PayPage() {
                 onApprove={async (data) => {
                   const { contractId } = await createPayPalOrder({ paymentToken: token });
                   await capturePayPalOrder({ orderId: data.orderID, contractId });
-                  router.push("/pay/success?method=paypal");
+                  router.replace("/pay/success?method=paypal");
                 }}
                 onError={() => setError("PayPal-Zahlung fehlgeschlagen")}
               />
