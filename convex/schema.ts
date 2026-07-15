@@ -100,11 +100,16 @@ export default defineSchema({
 
     paymentCount:  v.number(),
     canceledAt:    v.optional(v.number()),
-    paymentToken:  v.optional(v.string()),   // für Zahlungslink-URL
+    paymentToken:  v.optional(v.string()),
+
+    // Stripe Subscription (wird gesetzt sobald STRIPE_SUBSCRIPTION_MODE aktiv)
+    stripeSubscriptionId: v.optional(v.string()),
+    stripeCustomerId:     v.optional(v.string()),
   })
-    .index("by_affiliate",     ["affiliateId"])
-    .index("by_shopLead",      ["shopLeadId"])
-    .index("by_paymentToken",  ["paymentToken"]),
+    .index("by_affiliate",            ["affiliateId"])
+    .index("by_shopLead",             ["shopLeadId"])
+    .index("by_paymentToken",         ["paymentToken"])
+    .index("by_stripeSubscriptionId", ["stripeSubscriptionId"]),
 
   // ── Commissions ─────────────────────────────────────────────────────────────
   commissions: defineTable({

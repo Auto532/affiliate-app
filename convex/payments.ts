@@ -95,6 +95,37 @@ export const autoRecordPayment = internalMutation({
   },
 });
 
+export const cancelContractByStripe = internalMutation({
+  args: { shopContractId: v.id("shopContracts") },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.shopContractId, { status: "canceled", canceledAt: Date.now() });
+  },
+});
+
+export const patchContractStripeIds = internalMutation({
+  args: {
+    shopContractId:       v.id("shopContracts"),
+    stripeSubscriptionId: v.string(),
+    stripeCustomerId:     v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.shopContractId, {
+      stripeSubscriptionId: args.stripeSubscriptionId,
+      stripeCustomerId:     args.stripeCustomerId,
+    });
+  },
+});
+
+export const getContractBySubscriptionId = internalQuery({
+  args: { stripeSubscriptionId: v.string() },
+  handler: async (ctx, args) => {
+    return ctx.db
+      .query("shopContracts")
+      .withIndex("by_stripeSubscriptionId", q => q.eq("stripeSubscriptionId", args.stripeSubscriptionId))
+      .unique();
+  },
+});
+
 export const getLeadForContract = internalQuery({
   args: { shopContractId: v.id("shopContracts") },
   handler: async (ctx, args) => {
@@ -177,6 +208,8 @@ export const simulateTestPayment = action({
 });
 
 // ── Stripe: Checkout-Session erstellen ────────────────────────────────────────
+// STRIPE_SUBSCRIPTION_MODE=true  → Abo (automatische Verlängerung)
+// (nicht gesetzt)                → Einmalzahlung (aktueller Pilot-Modus)
 
 export const createStripeCheckout = action({
   args: { paymentToken: v.string() },
@@ -187,28 +220,43 @@ export const createStripeCheckout = action({
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new Error("Ungültiger Zahlungslink");
 
-    const session = await stripe.checkout.sessions.create({
-      mode: "payment",
-      payment_method_types: ["card", "sepa_debit"],
-      line_items: [{
-        price_data: {
-          currency: "eur",
-          product_data: {
-            name: `Loatycard ${info.planType === "annual" ? "Jahresabo" : "Monatsabo"}`,
-            description: info.shopName,
-          },
-          unit_amount: info.amount * 100,
-        },
-        quantity: 1,
-      }],
-      success_url: `${APP_URL}/pay/success?method=stripe`,
-      cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
-      metadata: {
-        paymentToken: args.paymentToken,
-        contractId:   info.contractId,
-      },
-    });
+    const subscriptionMode = process.env.STRIPE_SUBSCRIPTION_MODE === "true";
+    const planLabel = info.planType === "annual" ? "Jahresabo" : "Monatsabo";
 
+    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = subscriptionMode
+      ? {
+          mode: "subscription",
+          payment_method_types: ["card", "sepa_debit"],
+          line_items: [{
+            price_data: {
+              currency: "eur",
+              product_data: { name: `Loatycard ${planLabel}`, description: info.shopName },
+              unit_amount: info.amount * 100,
+              recurring: { interval: info.planType === "annual" ? "year" : "month" },
+            },
+            quantity: 1,
+          }],
+          success_url: `${APP_URL}/pay/success?method=stripe`,
+          cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
+          metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
+        }
+      : {
+          mode: "payment",
+          payment_method_types: ["card", "sepa_debit"],
+          line_items: [{
+            price_data: {
+              currency: "eur",
+              product_data: { name: `Loatycard ${planLabel}`, description: info.shopName },
+              unit_amount: info.amount * 100,
+            },
+            quantity: 1,
+          }],
+          success_url: `${APP_URL}/pay/success?method=stripe`,
+          cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
+          metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
+        };
+
+    const session = await stripe.checkout.sessions.create(sessionParams);
     return { url: session.url };
   },
 });
@@ -228,11 +276,23 @@ export const handleStripeWebhook = action({
       throw new Error("Webhook-Signatur ungültig");
     }
 
+    // Einmalzahlung: Zahlung direkt beim Checkout erfassen
     if (event.type === "checkout.session.completed") {
       const session    = event.data.object as any;
       const contractId = session.metadata?.contractId;
-      const paymentRef = session.payment_intent ?? session.id;
 
+      // Subscription-Modus: nur Subscription-ID speichern, Zahlung kommt via invoice-Event
+      if (session.mode === "subscription" && contractId && session.subscription) {
+        await ctx.runMutation(internal.payments.patchContractStripeIds, {
+          shopContractId:       contractId,
+          stripeSubscriptionId: session.subscription as string,
+          stripeCustomerId:     session.customer as string,
+        });
+        return; // Zahlung wird durch invoice.payment_succeeded erfasst
+      }
+
+      // Einmalzahlung
+      const paymentRef = session.payment_intent ?? session.id;
       if (contractId) {
         const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
           shopContractId: contractId,
@@ -242,6 +302,39 @@ export const handleStripeWebhook = action({
         if (result?.paymentNumber === 1) {
           await ctx.runAction(internal.payments.provisionShop, { shopContractId: contractId });
         }
+      }
+    }
+
+    // Subscription: jede Zahlung (erste + alle Verlängerungen) automatisch erfassen
+    if (event.type === "invoice.payment_succeeded") {
+      const invoice        = event.data.object as any;
+      const subscriptionId = invoice.subscription as string | undefined;
+      if (!subscriptionId) return;
+
+      const contract = await ctx.runQuery(internal.payments.getContractBySubscriptionId, {
+        stripeSubscriptionId: subscriptionId,
+      });
+      if (!contract) return;
+
+      const paymentRef = (invoice.payment_intent as string | null) ?? invoice.id;
+      const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
+        shopContractId: contract._id,
+        paymentRef,
+        method: "stripe-subscription",
+      });
+      if (result?.paymentNumber === 1) {
+        await ctx.runAction(internal.payments.provisionShop, { shopContractId: contract._id });
+      }
+    }
+
+    // Subscription gekündigt
+    if (event.type === "customer.subscription.deleted") {
+      const sub = event.data.object as any;
+      const contract = await ctx.runQuery(internal.payments.getContractBySubscriptionId, {
+        stripeSubscriptionId: sub.id as string,
+      });
+      if (contract) {
+        await ctx.runMutation(internal.payments.cancelContractByStripe, { shopContractId: contract._id });
       }
     }
   },
