@@ -82,7 +82,7 @@ export const autoRecordPayment = internalMutation({
   },
 });
 
-// ── Test: Zahlung simulieren (nur wenn ENABLE_TEST_PAYMENT=true) ─────────────
+// !! VOR LAUNCH KOMPLETT LÖSCHEN: simulateTestPayment + Button in app/pay/[token]/page.tsx !!
 
 export const simulateTestPayment = action({
   args: { paymentToken: v.string() },

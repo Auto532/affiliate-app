@@ -144,6 +144,7 @@ export default function PayPage() {
         <p className="text-center text-red-400 text-sm">{error}</p>
       )}
 
+      {/* !! VOR LAUNCH LÖSCHEN: Test-Button + handleTestPayment + simulatePayment !! */}
       <button onClick={handleTestPayment} disabled={testLoading}
           className="w-full py-3 rounded-2xl font-semibold text-sm disabled:opacity-50 transition-opacity"
           style={{ background: "rgba(255,255,255,.05)", border: "1px dashed rgba(255,255,255,.15)", color: "rgba(242,237,228,.4)" }}>
