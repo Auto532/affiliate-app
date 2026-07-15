@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import QRCode from "react-qr-code";
 
 const APP_URL     = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL     ?? "http://localhost:3000";
 const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de";
@@ -27,6 +28,7 @@ export default function ShopDetailPage() {
   const leadId   = params.leadId as string;
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   useEffect(() => {
     const t = localStorage.getItem("affiliate_token");
@@ -120,9 +122,27 @@ export default function ShopDetailPage() {
             <a href={`mailto:${lead.ownerEmail}?subject=Dein Loatycard Zahlungslink&body=Hallo ${lead.ownerName},%0A%0Ahier ist dein persönlicher Zahlungslink:%0A${payLink}%0A%0ABei Fragen melde dich gerne.`}
               className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-center transition-colors"
               style={{ background: "rgba(201,162,39,.1)", border: "1px solid rgba(201,162,39,.2)", color: "#c9a227" }}>
-              Per E-Mail senden
+              Per E-Mail
             </a>
+            <button onClick={() => setShowQR(v => !v)}
+              className="flex-1 py-2.5 rounded-xl text-xs font-semibold transition-colors"
+              style={showQR
+                ? { background: "rgba(201,162,39,.2)", border: "1px solid rgba(201,162,39,.4)", color: "#c9a227" }
+                : { background: "rgba(201,162,39,.1)", border: "1px solid rgba(201,162,39,.2)", color: "#c9a227" }}>
+              {showQR ? "QR ausblenden" : "QR-Code"}
+            </button>
           </div>
+
+          {showQR && (
+            <div className="flex flex-col items-center gap-3 pt-1">
+              <div className="rounded-2xl p-4 bg-white">
+                <QRCode value={payLink} size={180} />
+              </div>
+              <p className="text-[10px] text-[rgba(242,237,228,.3)] text-center">
+                Kamera draufhalten — öffnet den Zahlungslink direkt
+              </p>
+            </div>
+          )}
         </div>
       )}
 
