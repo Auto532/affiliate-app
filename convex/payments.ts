@@ -133,7 +133,17 @@ export const getLeadForContract = internalQuery({
     if (!contract) return null;
     const lead = await ctx.db.get(contract.shopLeadId);
     if (!lead) return null;
-    return { leadId: lead._id, shopName: lead.shopName, loatycardShopId: lead.loatycardShopId };
+    return {
+      leadId:           lead._id,
+      shopName:         lead.shopName,
+      ownerName:        lead.ownerName,
+      ownerEmail:       lead.ownerEmail,
+      ownerPhone:       lead.ownerPhone,
+      city:             lead.city,
+      businessType:     lead.businessType,
+      loatycardShopId:  lead.loatycardShopId,
+      planType:         contract.planType,
+    };
   },
 });
 
@@ -180,11 +190,21 @@ export const provisionShop = internalAction({
       loatycardAdminToken: adminLoginToken,
     });
 
+    const planLabel  = lead.planType === "annual" ? "Jahresabo (€389)" : "Monatsabo (€39)";
+    const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${lead.ownerPhone}`   : "";
+    const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${lead.city}`            : "";
+    const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${lead.businessType}` : "";
+
     await sendTelegram(
-      `🏪 <b>Neuer Shop angelegt!</b>\n\n` +
+      `🏪 <b>Neuer Shop ist live!</b>\n\n` +
       `<b>Shop:</b> ${lead.shopName}\n` +
       `<b>Slug:</b> ${slug}\n` +
-      `<b>Jetzt einrichten:</b> Design &amp; Bonusprogramm nicht vergessen!`
+      `<b>Shop-ID:</b> <code>${shopId}</code>\n\n` +
+      `<b>Modell:</b> ${planLabel}\n\n` +
+      `👤 <b>Inhaber:</b> ${lead.ownerName}\n` +
+      `✉️ <b>E-Mail:</b> ${lead.ownerEmail}` +
+      phoneLine + cityLine + branchLine +
+      `\n\n⚙️ Design &amp; Bonusprogramm einrichten nicht vergessen!`
     );
   },
 });

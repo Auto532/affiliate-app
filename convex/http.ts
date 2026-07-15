@@ -2,6 +2,8 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
 
+const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "";
+
 const http = httpRouter();
 
 http.route({
@@ -17,6 +19,22 @@ http.route({
     } catch (e: any) {
       return new Response(e.message, { status: 400 });
     }
+  }),
+});
+
+http.route({
+  path:   "/admin/earnings",
+  method: "GET",
+  handler: httpAction(async (ctx, req) => {
+    const secret = new URL(req.url).searchParams.get("secret") ?? "";
+    if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    const data = await ctx.runQuery(api.admin.getEarningsSummary, { adminSecret: secret });
+    return new Response(JSON.stringify(data), {
+      status:  200,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
+    });
   }),
 });
 

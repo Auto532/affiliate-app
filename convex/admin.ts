@@ -398,6 +398,45 @@ export const createPayout = mutation({
   },
 });
 
+// ── Einnahmen-Übersicht (für Admin) ──────────────────────────────────────────
+
+export const getEarningsSummary = query({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const [contracts, commissions] = await Promise.all([
+      ctx.db.query("shopContracts").collect(),
+      ctx.db.query("commissions").collect(),
+    ]);
+
+    // Umsatz = alle Zahlungen die eingegangen sind
+    let revenueTotal = 0;
+    for (const c of contracts) {
+      const amount = c.planType === "annual" ? 389 : 39;
+      revenueTotal += c.paymentCount * amount;
+    }
+
+    // Provisionen nach Status
+    const commPending   = commissions.filter(c => c.status === "pending")  .reduce((s, c) => s + c.amount, 0);
+    const commConfirmed = commissions.filter(c => c.status === "confirmed").reduce((s, c) => s + c.amount, 0);
+    const commPaid      = commissions.filter(c => c.status === "paid")     .reduce((s, c) => s + c.amount, 0);
+    const commTotal     = commPending + commConfirmed + commPaid;
+
+    const activeContracts = contracts.filter(c => c.status === "active").length;
+
+    return {
+      revenueTotal:   Math.round(revenueTotal   * 100) / 100,
+      commTotal:      Math.round(commTotal       * 100) / 100,
+      commPending:    Math.round(commPending     * 100) / 100,
+      commConfirmed:  Math.round(commConfirmed   * 100) / 100,
+      commPaid:       Math.round(commPaid        * 100) / 100,
+      netEarnings:    Math.round((revenueTotal - commTotal) * 100) / 100,
+      activeContracts,
+    };
+  },
+});
+
 // ── Vertrag für Lead ─────────────────────────────────────────────────────────
 
 export const getContractForLead = query({
