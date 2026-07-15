@@ -36,6 +36,18 @@ export const register = mutation({
     email:        v.string(),
     passwordHash: v.string(),
     businessType: v.optional(v.union(v.literal("private"), v.literal("business"))),
+    phone:        v.optional(v.string()),
+    company:      v.optional(v.string()),
+    dateOfBirth:  v.optional(v.string()),
+    taxId:        v.optional(v.string()),
+    vatId:        v.optional(v.string()),
+    address:      v.optional(v.string()),
+    zip:          v.optional(v.string()),
+    city:         v.optional(v.string()),
+    country:      v.optional(v.string()),
+    bankIban:     v.optional(v.string()),
+    bankBic:      v.optional(v.string()),
+    bankName:     v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -66,6 +78,18 @@ export const register = mutation({
       referralCode: code,
       status:       "pending",
       businessType: args.businessType,
+      phone:        args.phone,
+      company:      args.company,
+      dateOfBirth:  args.dateOfBirth,
+      taxId:        args.taxId,
+      vatId:        args.vatId,
+      address:      args.address,
+      zip:          args.zip,
+      city:         args.city,
+      country:      args.country ?? "Deutschland",
+      bankIban:     args.bankIban,
+      bankBic:      args.bankBic,
+      bankName:     args.bankName,
     });
 
     await ctx.db.insert("auditLog", {
