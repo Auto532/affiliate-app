@@ -69,6 +69,9 @@ export default defineSchema({
     inviteExpiresAt:   v.optional(v.number()),   // Unix timestamp
     inviteAcceptedAt:  v.optional(v.number()),
 
+    wantsDesign:       v.optional(v.boolean()),
+    wantsBonusStamps:  v.optional(v.boolean()),
+
     rejectionReason:   v.optional(v.string()),
     adminNotes:        v.optional(v.string()),
 

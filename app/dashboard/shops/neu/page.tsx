@@ -21,9 +21,11 @@ export default function NewShopPage() {
     shopName: "", ownerName: "", ownerEmail: "",
     ownerPhone: "", businessType: "", city: "",
   });
-  const [planType, setPlanType] = useState<"annual" | "monthly">("annual");
-  const [error, setError]       = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [planType,         setPlanType]         = useState<"annual" | "monthly">("annual");
+  const [wantsDesign,      setWantsDesign]      = useState(false);
+  const [wantsBonusStamps, setWantsBonusStamps] = useState(false);
+  const [error, setError]                       = useState("");
+  const [loading, setLoading]                   = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -35,6 +37,8 @@ export default function NewShopPage() {
     try {
       const leadId = await submitLead({
         token, planType,
+        wantsDesign:      wantsDesign      || undefined,
+        wantsBonusStamps: wantsBonusStamps || undefined,
         ...form,
         ownerPhone:   form.ownerPhone   || undefined,
         businessType: form.businessType || undefined,
@@ -91,6 +95,40 @@ export default function NewShopPage() {
                 <p className="text-sm font-semibold text-[#f2ede4]">{p.label}</p>
                 <p className="text-xs text-[rgba(242,237,228,.4)] mt-0.5">{p.price}</p>
                 <p className="text-[10px] text-[#c9a227] mt-1">Provision: {p.comm}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Extras */}
+        <div>
+          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Extras (optional)</label>
+          <div className="grid grid-cols-2 gap-2">
+            {([
+              { state: wantsDesign,      set: setWantsDesign,      label: "Custom Design",        sub: "Individuelle Gestaltung" },
+              { state: wantsBonusStamps, set: setWantsBonusStamps, label: "Bonus-Stempel",        sub: "Mehr als 10 Stempel"     },
+            ] as const).map((opt, i) => (
+              <button key={i} type="button" onClick={() => opt.set((v: boolean) => !v)}
+                className="rounded-xl p-3 text-left transition-colors"
+                style={opt.state
+                  ? { background: "rgba(201,162,39,.12)", border: "1px solid rgba(201,162,39,.4)" }
+                  : { background: "#17150f",              border: "1px solid rgba(255,255,255,.08)" }}>
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
+                    style={opt.state
+                      ? { background: "#c9a227" }
+                      : { background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.15)" }}>
+                    {opt.state && (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0d0c0a" strokeWidth="3">
+                        <polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-[#f2ede4] leading-none">{opt.label}</p>
+                    <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">{opt.sub}</p>
+                  </div>
+                </div>
               </button>
             ))}
           </div>

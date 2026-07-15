@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as affiliates from "../affiliates.js";
 import type * as commissionEngine from "../commissionEngine.js";
+import type * as emails from "../emails.js";
 import type * as http from "../http.js";
 import type * as payments from "../payments.js";
 import type * as shopLeads from "../shopLeads.js";
@@ -25,6 +26,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   affiliates: typeof affiliates;
   commissionEngine: typeof commissionEngine;
+  emails: typeof emails;
   http: typeof http;
   payments: typeof payments;
   shopLeads: typeof shopLeads;

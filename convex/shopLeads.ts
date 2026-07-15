@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 
 async function requireAffiliate(ctx: any, token: string) {
   const session = await ctx.db
@@ -16,14 +17,16 @@ async function requireAffiliate(ctx: any, token: string) {
 
 export const submitLead = mutation({
   args: {
-    token:        v.string(),
-    shopName:     v.string(),
-    ownerName:    v.string(),
-    ownerEmail:   v.string(),
-    ownerPhone:   v.optional(v.string()),
-    businessType: v.optional(v.string()),
-    city:         v.optional(v.string()),
-    planType:     v.union(v.literal("annual"), v.literal("monthly")),
+    token:            v.string(),
+    shopName:         v.string(),
+    ownerName:        v.string(),
+    ownerEmail:       v.string(),
+    ownerPhone:       v.optional(v.string()),
+    businessType:     v.optional(v.string()),
+    city:             v.optional(v.string()),
+    planType:         v.union(v.literal("annual"), v.literal("monthly")),
+    wantsDesign:      v.optional(v.boolean()),
+    wantsBonusStamps: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const affiliate = await requireAffiliate(ctx, args.token);
@@ -37,15 +40,17 @@ export const submitLead = mutation({
     const now = Date.now();
 
     const leadId = await ctx.db.insert("shopLeads", {
-      affiliateId:  affiliate._id,
-      shopName:     args.shopName,
-      ownerName:    args.ownerName,
-      ownerEmail:   args.ownerEmail,
-      ownerPhone:   args.ownerPhone,
-      businessType: args.businessType,
-      city:         args.city,
-      source:       "direct_form",
-      status:       "pending_payment",
+      affiliateId:      affiliate._id,
+      shopName:         args.shopName,
+      ownerName:        args.ownerName,
+      ownerEmail:       args.ownerEmail,
+      ownerPhone:       args.ownerPhone,
+      businessType:     args.businessType,
+      city:             args.city,
+      source:           "direct_form",
+      status:           "pending_payment",
+      wantsDesign:      args.wantsDesign,
+      wantsBonusStamps: args.wantsBonusStamps,
     });
 
     await ctx.db.insert("shopContracts", {
@@ -65,6 +70,15 @@ export const submitLead = mutation({
       actorType:  "affiliate",
       actorId:    affiliate._id,
       note:       `${affiliate.name} · Plan: ${args.planType}`,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+      ownerEmail:       args.ownerEmail,
+      ownerName:        args.ownerName,
+      shopName:         args.shopName,
+      planType:         args.planType,
+      wantsDesign:      args.wantsDesign,
+      wantsBonusStamps: args.wantsBonusStamps,
     });
 
     return leadId;
