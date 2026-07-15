@@ -21,8 +21,6 @@ export default function PayPage() {
   const [testLoading, setTestLoading]     = useState(false);
   const [error, setError]                 = useState("");
 
-  const isTestMode = process.env.NEXT_PUBLIC_ENABLE_TEST_PAYMENT === "true";
-
   const handleTestPayment = async () => {
     setTestLoading(true); setError("");
     try {
@@ -146,13 +144,11 @@ export default function PayPage() {
         <p className="text-center text-red-400 text-sm">{error}</p>
       )}
 
-      {isTestMode && (
-        <button onClick={handleTestPayment} disabled={testLoading}
+      <button onClick={handleTestPayment} disabled={testLoading}
           className="w-full py-3 rounded-2xl font-semibold text-sm disabled:opacity-50 transition-opacity"
           style={{ background: "rgba(255,255,255,.05)", border: "1px dashed rgba(255,255,255,.15)", color: "rgba(242,237,228,.4)" }}>
           {testLoading ? "Simuliere..." : "🧪 Test-Zahlung simulieren"}
         </button>
-      )}
 
       <p className="text-center text-[10px] text-[rgba(242,237,228,.2)]">
         Sichere Zahlung · SSL-verschlüsselt · Loatycard GmbH

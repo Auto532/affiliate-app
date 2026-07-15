@@ -87,7 +87,6 @@ export const autoRecordPayment = internalMutation({
 export const simulateTestPayment = action({
   args: { paymentToken: v.string() },
   handler: async (ctx, args): Promise<void> => {
-    if (process.env.ENABLE_TEST_PAYMENT !== "true") throw new Error("Test-Modus nicht aktiv");
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new Error("Ungültiger Zahlungslink");
     await ctx.runMutation(internal.payments.autoRecordPayment, {
