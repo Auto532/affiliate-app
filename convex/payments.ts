@@ -108,10 +108,19 @@ export const autoRecordPayment = internalMutation({
       ? (contract.discountedPrice ?? Math.round(listPrice * (1 - contract.firstYearDiscount) * 100) / 100)
       : listPrice;
 
+    // Provisions-Rate: normal aus commissionEngine. Ein Rabattcode kann die Rate
+    // der ERSTEN Zahlung einmalig überschreiben (z.B. LOYAL50 = 50%). Ab Zahlung #2
+    // gilt wieder die normale Regel.
+    let rate = rule.rate;
+    if (isFirst && contract.discountCode) {
+      const override = lookupDiscount(contract.discountCode)?.firstPaymentCommissionRate;
+      if (override !== undefined) rate = override;
+    }
+
     // Provisions-Basis per Flag: "paid" (Default) = gezahlter Betrag, "full" = Listenpreis.
     // Immer aus echten Server-Werten, nie aus Client-Input.
     const base = commissionBase() === "full" ? listPrice : paidAmount;
-    let amount = Math.round(base * rule.rate * 100) / 100;
+    let amount = Math.round(base * rate * 100) / 100;
 
     // Sicherung: Provision darf nie höher sein als der tatsächlich eingenommene Betrag
     // (kein Minusgeschäft pro Sale). Falls doch → deckeln + loggen.
@@ -127,7 +136,7 @@ export const autoRecordPayment = internalMutation({
       paymentNumber:  newCount,
       phase:          rule.phase,
       planType:       contract.planType,
-      rate:           rule.rate,
+      rate,
       baseAmount:     base,
       amount,
       status:         "pending",
