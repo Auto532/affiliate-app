@@ -118,7 +118,7 @@ export const provisionShop = internalAction({
     if (!lead || lead.loatycardShopId) return; // bereits provisioniert
 
     const siteUrl = process.env.STEMPELKARTEN_CONVEX_SITE_URL ?? "";
-    const adminPin = process.env.STEMPELKARTEN_ADMIN_PIN ?? "";
+    const adminPin = process.env.ADMIN_SECRET ?? "";
     if (!siteUrl) return;
 
     const res = await fetch(`${siteUrl}/provision-shop`, {
