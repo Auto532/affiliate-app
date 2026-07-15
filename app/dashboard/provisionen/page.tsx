@@ -25,10 +25,19 @@ export default function ProvisionsPage() {
   }, [router]);
 
   const commissions = useQuery(api.shopLeads.myCommissions, token ? { token } : "skip");
+  const profile     = useQuery(api.affiliates.me,            token ? { token } : "skip");
 
   const total    = commissions?.reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
   const pending  = commissions?.filter((c: { status: string }) => c.status === "pending").reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
   const confirmed = commissions?.filter((c: { status: string }) => c.status === "confirmed").reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
+
+  const PRIVATE_LIMIT = 256;
+  const isPrivate     = profile?.businessType === "private";
+  const currentYear   = new Date().getFullYear();
+  const yearTotal     = commissions?.filter((c: { triggeredAt: number }) =>
+    new Date(c.triggeredAt).getFullYear() === currentYear
+  ).reduce((s: number, c: { amount: number }) => s + c.amount, 0) ?? 0;
+  const limitPct      = Math.min((yearTotal / PRIVATE_LIMIT) * 100, 100);
 
   return (
     <div className="min-h-screen max-w-lg mx-auto px-4 py-8 space-y-4">
@@ -56,6 +65,31 @@ export default function ProvisionsPage() {
           </div>
         ))}
       </div>
+
+      {/* Privatperson-Grenze */}
+      {isPrivate && (
+        <div className="rounded-2xl p-4 space-y-2"
+          style={{ background: yearTotal >= PRIVATE_LIMIT ? "rgba(239,68,68,.06)" : "rgba(251,191,36,.06)",
+                   border: `1px solid ${yearTotal >= PRIVATE_LIMIT ? "rgba(239,68,68,.25)" : "rgba(251,191,36,.2)"}` }}>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold" style={{ color: yearTotal >= PRIVATE_LIMIT ? "#f87171" : "#fbbf24" }}>
+              {yearTotal >= PRIVATE_LIMIT ? "⚠ Freigrenze überschritten" : "Jahres-Freigrenze (Privatperson)"}
+            </p>
+            <p className="text-xs font-bold" style={{ color: yearTotal >= PRIVATE_LIMIT ? "#f87171" : "#fbbf24" }}>
+              €{yearTotal.toFixed(2)} / €{PRIVATE_LIMIT}
+            </p>
+          </div>
+          <div className="h-1.5 rounded-full bg-[rgba(255,255,255,.06)]">
+            <div className="h-1.5 rounded-full transition-all"
+              style={{ width: `${limitPct}%`, background: yearTotal >= PRIVATE_LIMIT ? "#f87171" : "#fbbf24" }} />
+          </div>
+          <p className="text-[10px] text-[rgba(242,237,228,.4)] leading-relaxed">
+            {yearTotal >= PRIVATE_LIMIT
+              ? `Du hast die gesetzliche Freigrenze von ${PRIVATE_LIMIT} €/Jahr (§22 Nr. 3 EStG) überschritten. Bitte melde dich bei uns und erwäge eine Gewerbeanmeldung.`
+              : `Als Privatperson gilt die gesetzliche Freigrenze von ${PRIVATE_LIMIT} €/Jahr (§22 Nr. 3 EStG). Über dieser Grenze musst du deine Provisionen vollständig versteuern.`}
+          </p>
+        </div>
+      )}
 
       {/* Liste */}
       {commissions === undefined && (
