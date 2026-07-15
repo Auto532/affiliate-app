@@ -4,6 +4,7 @@ import { resolveCommissionRule } from "./commissionEngine";
 
 const ADMIN_SECRET = process.env.ADMIN_SECRET ?? "changeme";
 
+
 function requireAdmin(secret: string) {
   if (secret !== ADMIN_SECRET) throw new Error("Kein Zugriff");
 }
