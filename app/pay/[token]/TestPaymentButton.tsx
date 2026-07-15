@@ -1,8 +1,9 @@
 "use client";
 // ⚠️ TEST-ONLY — siehe convex/testPayments.ts. Vor Live-Schaltung diese Datei
 // löschen und Import + <TestPaymentButton/> aus page.tsx entfernen.
-// Sichtbar nur bei NEXT_PUBLIC_TEST_PAYMENTS === "true"; die eigentliche
-// Absicherung liegt serverseitig (Env-Flag + Admin-PIN).
+// Der Button ist sichtbar, die eigentliche Absicherung liegt serverseitig:
+// die Simulation läuft nur mit gültigem Admin-PIN UND gesetztem Convex-Env-Flag
+// TEST_PAYMENTS_ENABLED. Ohne beides passiert nichts.
 
 import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
@@ -15,8 +16,6 @@ export default function TestPaymentButton({ token }: { token: string }) {
   const [pin, setPin]         = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState("");
-
-  if (process.env.NEXT_PUBLIC_TEST_PAYMENTS !== "true") return null;
 
   const run = async () => {
     setLoading(true); setError("");
