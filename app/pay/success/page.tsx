@@ -25,10 +25,6 @@ function SuccessContent() {
             {" "}Deine Loatycard-Stempelkarte wird in Kürze eingerichtet.
           </p>
         </div>
-        <div className="rounded-xl px-4 py-3 text-sm text-[rgba(242,237,228,.5)]"
-          style={{ background: "rgba(201,162,39,.06)", border: "1px solid rgba(201,162,39,.15)" }}>
-          Du erhältst eine Bestätigung per E-Mail.
-        </div>
       </div>
     </div>
   );

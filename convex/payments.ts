@@ -1,4 +1,4 @@
-import { action, internalMutation, query } from "./_generated/server";
+import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
@@ -41,9 +41,9 @@ export const autoRecordPayment = internalMutation({
     paymentRef:     v.string(),
     method:         v.string(),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ paymentNumber: number } | null> => {
     const contract = await ctx.db.get(args.shopContractId);
-    if (!contract || contract.status !== "active") return;
+    if (!contract || contract.status !== "active") return null;
 
     const newCount = contract.paymentCount + 1;
 
@@ -53,7 +53,7 @@ export const autoRecordPayment = internalMutation({
         q.eq("shopContractId", args.shopContractId).eq("paymentNumber", newCount)
       )
       .unique();
-    if (existing) return;
+    if (existing) return null;
 
     const rule = resolveCommissionRule(contract.planType, newCount);
 
@@ -79,6 +79,62 @@ export const autoRecordPayment = internalMutation({
       actorType:  "system",
       note:       `${args.method} · Ref: ${args.paymentRef} · #${newCount} · €${rule.amount}`,
     });
+
+    return { paymentNumber: newCount };
+  },
+});
+
+export const getLeadForContract = internalQuery({
+  args: { shopContractId: v.id("shopContracts") },
+  handler: async (ctx, args) => {
+    const contract = await ctx.db.get(args.shopContractId);
+    if (!contract) return null;
+    const lead = await ctx.db.get(contract.shopLeadId);
+    if (!lead) return null;
+    return { leadId: lead._id, shopName: lead.shopName, loatycardShopId: lead.loatycardShopId };
+  },
+});
+
+export const patchLeadAfterProvision = internalMutation({
+  args: {
+    leadId:              v.id("shopLeads"),
+    loatycardShopId:     v.string(),
+    loatycardShopSlug:   v.string(),
+    loatycardAdminToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.leadId, {
+      loatycardShopId:     args.loatycardShopId,
+      loatycardShopSlug:   args.loatycardShopSlug,
+      loatycardAdminToken: args.loatycardAdminToken,
+    });
+  },
+});
+
+export const provisionShop = internalAction({
+  args: { shopContractId: v.id("shopContracts") },
+  handler: async (ctx, args): Promise<void> => {
+    const lead = await ctx.runQuery(internal.payments.getLeadForContract, { shopContractId: args.shopContractId });
+    if (!lead || lead.loatycardShopId) return; // bereits provisioniert
+
+    const siteUrl = process.env.STEMPELKARTEN_CONVEX_SITE_URL ?? "";
+    const adminPin = process.env.STEMPELKARTEN_ADMIN_PIN ?? "";
+    if (!siteUrl) return;
+
+    const res = await fetch(`${siteUrl}/provision-shop`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ adminPin, shopName: lead.shopName, affiliateLeadId: lead.leadId }),
+    });
+    if (!res.ok) return;
+
+    const { shopId, slug, adminLoginToken } = await res.json();
+    await ctx.runMutation(internal.payments.patchLeadAfterProvision, {
+      leadId:              lead.leadId,
+      loatycardShopId:     shopId,
+      loatycardShopSlug:   slug,
+      loatycardAdminToken: adminLoginToken,
+    });
   },
 });
 
@@ -89,11 +145,14 @@ export const simulateTestPayment = action({
   handler: async (ctx, args): Promise<void> => {
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new Error("Ungültiger Zahlungslink");
-    await ctx.runMutation(internal.payments.autoRecordPayment, {
+    const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
       shopContractId: info.contractId,
       paymentRef: `test-${Date.now()}`,
       method: "test",
     });
+    if (result?.paymentNumber === 1) {
+      await ctx.runAction(internal.payments.provisionShop, { shopContractId: info.contractId });
+    }
   },
 });
 
@@ -155,11 +214,14 @@ export const handleStripeWebhook = action({
       const paymentRef = session.payment_intent ?? session.id;
 
       if (contractId) {
-        await ctx.runMutation(internal.payments.autoRecordPayment, {
+        const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
           shopContractId: contractId,
           paymentRef,
           method: "stripe",
         });
+        if (result?.paymentNumber === 1) {
+          await ctx.runAction(internal.payments.provisionShop, { shopContractId: contractId });
+        }
       }
     }
   },
@@ -221,11 +283,14 @@ export const capturePayPalOrder = action({
     const capture = await res.json();
 
     if (capture.status === "COMPLETED") {
-      await ctx.runMutation(internal.payments.autoRecordPayment, {
+      const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
         shopContractId: args.contractId,
         paymentRef:     args.orderId,
         method:         "paypal",
       });
+      if (result?.paymentNumber === 1) {
+        await ctx.runAction(internal.payments.provisionShop, { shopContractId: args.contractId });
+      }
     }
 
     return { status: capture.status };

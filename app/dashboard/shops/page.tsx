@@ -6,7 +6,8 @@ import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-const APP_URL = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "http://localhost:3000";
+const APP_URL       = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "http://localhost:3000";
+const STEMPEL_URL   = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de";
 
 function CopyPaymentLink({ token }: { token: string }) {
   const [copied, setCopied] = useState(false);
@@ -135,9 +136,20 @@ export default function ShopsPage() {
                   </div>
                 )}
 
-                {/* Zahlungslink */}
-                {contract?.paymentToken && (
+                {/* Zahlungslink — nur vor erster Zahlung */}
+                {contract?.paymentToken && contract.paymentCount === 0 && (
                   <CopyPaymentLink token={contract.paymentToken} />
+                )}
+
+                {/* Shop-Link — nach erster Zahlung */}
+                {lead.loatycardShopSlug && (
+                  <a href={`${STEMPEL_URL}/join/${lead.loatycardShopSlug}`}
+                    target="_blank" rel="noreferrer"
+                    className="flex items-center justify-between rounded-xl px-3 py-2.5"
+                    style={{ background: "rgba(74,222,128,.06)", border: "1px solid rgba(74,222,128,.2)" }}>
+                    <span className="text-xs text-green-400 font-semibold">✓ Shop ist live</span>
+                    <span className="text-[10px] text-[rgba(242,237,228,.4)] font-mono">{lead.loatycardShopSlug}</span>
+                  </a>
                 )}
               </div>
             );

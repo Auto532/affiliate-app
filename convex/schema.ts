@@ -71,9 +71,12 @@ export default defineSchema({
     adminNotes:        v.optional(v.string()),
 
     // gesetzt nach Genehmigung
-    loatycardShopId:   v.optional(v.string()),
-    approvedAt:        v.optional(v.number()),
-    approvedBy:        v.optional(v.string()),    // Admin-Name
+    loatycardShopId:       v.optional(v.string()),
+    approvedAt:            v.optional(v.number()),
+    approvedBy:            v.optional(v.string()),
+    // gesetzt nach erster Zahlung (Shop wird automatisch angelegt)
+    loatycardShopSlug:     v.optional(v.string()),
+    loatycardAdminToken:   v.optional(v.string()),
   })
     .index("by_affiliate",   ["affiliateId"])
     .index("by_ownerEmail",  ["ownerEmail"])
