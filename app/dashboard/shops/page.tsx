@@ -64,7 +64,8 @@ export default function ShopsPage() {
   const leads = useQuery(api.shopLeads.myLeads, token ? { token } : "skip");
 
   const active   = leads?.filter((l: any) => l.status === "active") ?? [];
-  const others   = leads?.filter((l: any) => l.status !== "active") ?? [];
+  const pending  = leads?.filter((l: any) => l.status === "pending_payment") ?? [];
+  const others   = leads?.filter((l: any) => l.status !== "active" && l.status !== "pending_payment") ?? [];
 
   return (
     <div className="min-h-screen max-w-lg mx-auto px-4 py-8 space-y-5">
@@ -96,6 +97,31 @@ export default function ShopsPage() {
           <Link href="/dashboard/shops/neu" className="text-[#c9a227] text-sm hover:underline">
             Ersten Shop einreichen →
           </Link>
+        </div>
+      )}
+
+      {/* Ausstehende Shops — Zahlung noch offen */}
+      {pending.length > 0 && (
+        <div className="space-y-3">
+          <p className="text-[10px] text-[rgba(242,237,228,.3)] uppercase tracking-wider font-semibold">
+            Zahlung ausstehend ({pending.length})
+          </p>
+          {pending.map((lead: any) => (
+            <Link key={lead._id} href={`/dashboard/shops/${lead._id}`}
+              className="flex items-center justify-between rounded-2xl p-4"
+              style={{ background: "#17150f", border: "1px solid rgba(201,162,39,.25)" }}>
+              <div>
+                <p className="font-semibold text-[#f2ede4]">{lead.shopName}</p>
+                <p className="text-xs text-[rgba(242,237,228,.4)]">{lead.ownerName} · {lead.city ?? "—"}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[#c9a227]">Zahlung offen</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c9a227" strokeWidth="2">
+                  <polyline points="9 18 15 12 9 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </Link>
+          ))}
         </div>
       )}
 

@@ -115,6 +115,8 @@ export const patchLeadAfterProvision = internalMutation({
   },
   handler: async (ctx, args) => {
     await ctx.db.patch(args.leadId, {
+      status:              "active",
+      approvedAt:          Date.now(),
       loatycardShopId:     args.loatycardShopId,
       loatycardShopSlug:   args.loatycardShopSlug,
       loatycardAdminToken: args.loatycardAdminToken,

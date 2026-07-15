@@ -45,9 +45,7 @@ export const submitLead = mutation({
       businessType: args.businessType,
       city:         args.city,
       source:       "direct_form",
-      status:       "active",
-      approvedAt:   now,
-      approvedBy:   "auto",
+      status:       "pending_payment",
     });
 
     await ctx.db.insert("shopContracts", {
@@ -138,10 +136,8 @@ export const acceptInvite = mutation({
       ownerPhone:       args.ownerPhone,
       businessType:     args.businessType,
       city:             args.city,
-      status:           "active",
+      status:           "pending_payment",
       inviteAcceptedAt: now,
-      approvedAt:       now,
-      approvedBy:       "auto",
     });
 
     await ctx.db.insert("shopContracts", {
@@ -183,9 +179,8 @@ export const myLeads = query({
       .order("desc")
       .collect();
 
-    // Vertragsphase hinzufügen falls aktiv
     const result = await Promise.all(leads.map(async lead => {
-      const contract = lead.status === "active"
+      const contract = (lead.status === "active" || lead.status === "pending_payment")
         ? await ctx.db
             .query("shopContracts")
             .withIndex("by_shopLead", q => q.eq("shopLeadId", lead._id))

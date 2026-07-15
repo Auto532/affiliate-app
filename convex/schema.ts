@@ -60,6 +60,7 @@ export default defineSchema({
       v.literal("under_review"),
       v.literal("approved"),
       v.literal("rejected"),
+      v.literal("pending_payment"),
       v.literal("active"),
     ),
 

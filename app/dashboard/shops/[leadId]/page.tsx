@@ -69,7 +69,8 @@ export default function ShopDetailPage() {
 
   const statusLabel: Record<string, string> = {
     draft: "Entwurf", submitted: "Eingereicht", under_review: "In Prüfung",
-    approved: "Genehmigt", rejected: "Abgelehnt", active: "Aktiv",
+    approved: "Genehmigt", rejected: "Abgelehnt",
+    pending_payment: "Zahlung ausstehend", active: "Aktiv",
   };
 
   return (
@@ -95,7 +96,8 @@ export default function ShopDetailPage() {
         <p className="text-sm text-[rgba(242,237,228,.5)]">Status</p>
         <span className={`text-sm font-semibold ${
           lead.status === "active" ? "text-green-400" :
-          lead.status === "rejected" ? "text-red-400" : "text-[#c9a227]"
+          lead.status === "rejected" ? "text-red-400" :
+          lead.status === "pending_payment" ? "text-[#c9a227]" : "text-[rgba(242,237,228,.4)]"
         }`}>{statusLabel[lead.status] ?? lead.status}</span>
       </div>
 
@@ -132,6 +134,12 @@ export default function ShopDetailPage() {
               {showQR ? "QR ausblenden" : "QR-Code"}
             </button>
           </div>
+
+          <Link href="/dashboard/shops"
+            className="block w-full py-2.5 rounded-xl text-xs font-semibold text-center mt-1"
+            style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)", color: "rgba(242,237,228,.4)" }}>
+            Kunde zahlt später — zur Übersicht
+          </Link>
 
           {showQR && (
             <div className="flex flex-col items-center gap-3 pt-1">
