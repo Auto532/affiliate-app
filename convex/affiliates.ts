@@ -179,6 +179,96 @@ export const updateBankDetails = mutation({
   },
 });
 
+// ── Eigenes Profil (Partner-Bereich) ─────────────────────────────────────────
+
+// Sensible Felder brauchen Admin-Freigabe; die restlichen werden sofort übernommen.
+const SENSITIVE_PROFILE_FIELDS = [
+  "name", "company", "taxId", "vatId", "dateOfBirth", "bankIban", "bankBic", "bankName",
+] as const;
+const IMMEDIATE_PROFILE_FIELDS = ["phone", "address", "zip", "city", "country"] as const;
+
+async function affiliateFromToken(ctx: MutationCtx, token: string): Promise<Doc<"affiliates">> {
+  const session = await ctx.db
+    .query("affiliateSessions")
+    .withIndex("by_token", q => q.eq("token", token))
+    .unique();
+  if (!session || session.expiresAt < Date.now()) throw new Error("Nicht eingeloggt");
+  const affiliate = await ctx.db.get(session.affiliateId);
+  if (!affiliate) throw new Error("Account nicht gefunden");
+  return affiliate;
+}
+
+export const getMyProfile = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("affiliateSessions")
+      .withIndex("by_token", q => q.eq("token", args.token))
+      .unique();
+    if (!session || session.expiresAt < Date.now()) return null;
+    const a = await ctx.db.get(session.affiliateId);
+    if (!a) return null;
+    const { passwordHash: _p, passwordSalt: _s, ...profile } = a;
+    return profile;
+  },
+});
+
+export const updateOwnProfile = mutation({
+  args: {
+    token:       v.string(),
+    // sofort übernommen
+    phone:       v.optional(v.string()),
+    address:     v.optional(v.string()),
+    zip:         v.optional(v.string()),
+    city:        v.optional(v.string()),
+    country:     v.optional(v.string()),
+    // freigabepflichtig
+    name:        v.optional(v.string()),
+    company:     v.optional(v.string()),
+    taxId:       v.optional(v.string()),
+    vatId:       v.optional(v.string()),
+    dateOfBirth: v.optional(v.string()),
+    bankIban:    v.optional(v.string()),
+    bankBic:     v.optional(v.string()),
+    bankName:    v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const affiliate = await affiliateFromToken(ctx, args.token);
+
+    const patch: Record<string, unknown> = {};
+    for (const k of IMMEDIATE_PROFILE_FIELDS) {
+      if (args[k] !== undefined) patch[k] = args[k];
+    }
+
+    // Nur sensible Felder, die sich ggü. dem freigegebenen Stand ändern → in pendingProfile.
+    const pending: Record<string, unknown> = {};
+    let hasPending = false;
+    for (const k of SENSITIVE_PROFILE_FIELDS) {
+      const val = args[k];
+      if (val !== undefined && val !== (affiliate as any)[k]) {
+        pending[k] = val;
+        hasPending = true;
+      }
+    }
+    if (hasPending) patch.pendingProfile = { ...pending, submittedAt: Date.now() };
+
+    await ctx.db.patch(affiliate._id, patch);
+
+    if (hasPending) {
+      await ctx.db.insert("auditLog", {
+        entityType: "affiliate",
+        entityId:   affiliate._id,
+        action:     "profile_change_requested",
+        actorType:  "affiliate",
+        actorId:    affiliate._id,
+        note:       Object.keys(pending).join(", "),
+      });
+    }
+
+    return { pending: hasPending, pendingFields: Object.keys(pending) };
+  },
+});
+
 // ── Einladungslink annehmen (Partner-Registrierung via Link) ──────────────────
 
 export const acceptAffiliateInvite = mutation({

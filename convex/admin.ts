@@ -523,3 +523,84 @@ export const getAdminDashboard = query({
     };
   },
 });
+
+// ── Profiländerungen freigeben / ablehnen ────────────────────────────────────
+
+export const approveProfileChange = mutation({
+  args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const a = await ctx.db.get(args.affiliateId);
+    if (!a?.pendingProfile) throw new Error("Keine ausstehende Änderung");
+    const { submittedAt: _s, ...fields } = a.pendingProfile;
+    await ctx.db.patch(args.affiliateId, { ...fields, pendingProfile: undefined });
+    await ctx.db.insert("auditLog", {
+      entityType: "affiliate",
+      entityId:   args.affiliateId,
+      action:     "profile_change_approved",
+      actorType:  "admin",
+      note:       Object.keys(fields).join(", "),
+    });
+  },
+});
+
+export const rejectProfileChange = mutation({
+  args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const a = await ctx.db.get(args.affiliateId);
+    if (!a?.pendingProfile) throw new Error("Keine ausstehende Änderung");
+    await ctx.db.patch(args.affiliateId, { pendingProfile: undefined });
+    await ctx.db.insert("auditLog", {
+      entityType: "affiliate",
+      entityId:   args.affiliateId,
+      action:     "profile_change_rejected",
+      actorType:  "admin",
+    });
+  },
+});
+
+// ── Partner-Detail (Admin-Popup) ─────────────────────────────────────────────
+
+export const getAffiliateDetail = query({
+  args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const a = await ctx.db.get(args.affiliateId);
+    if (!a) return null;
+    const { passwordHash: _p, passwordSalt: _s, ...affiliate } = a;
+
+    const [leads, commissions, payouts] = await Promise.all([
+      ctx.db.query("shopLeads").withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId)).order("desc").collect(),
+      ctx.db.query("commissions").withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId)).collect(),
+      ctx.db.query("payouts").withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId)).order("desc").collect(),
+    ]);
+
+    const sum = (st: string) =>
+      Math.round(commissions.filter(c => c.status === st).reduce((s, c) => s + c.amount, 0) * 100) / 100;
+
+    return {
+      affiliate,
+      pendingProfile: a.pendingProfile ?? null,
+      leads: leads.map(l => ({
+        _id: l._id, shopName: l.shopName, ownerName: l.ownerName,
+        city: l.city ?? null, status: l.status, createdAt: l._creationTime,
+      })),
+      stats: {
+        leadsTotal:    leads.length,
+        leadsActive:   leads.filter(l => l.status === "active").length,
+        leadsInReview: leads.filter(l => ["submitted", "under_review", "pending_payment"].includes(l.status)).length,
+        leadsRejected: leads.filter(l => l.status === "rejected").length,
+      },
+      commissions: {
+        pending:   sum("pending"),
+        confirmed: sum("confirmed"),
+        paid:      sum("paid"),
+        count:     commissions.length,
+      },
+      payouts: payouts.map(p => ({
+        _id: p._id, amountTotal: p.amountTotal, status: p.status, paidAt: p.paidAt ?? null,
+      })),
+    };
+  },
+});

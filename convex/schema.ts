@@ -33,6 +33,18 @@ export default defineSchema({
     bankBic:       v.optional(v.string()),
     bankName:      v.optional(v.string()),
     notes:         v.optional(v.string()),
+    // Freigabepflichtige Profiländerung (sensible Felder), wartet auf Admin-Freigabe.
+    pendingProfile: v.optional(v.object({
+      name:        v.optional(v.string()),
+      company:     v.optional(v.string()),
+      taxId:       v.optional(v.string()),
+      vatId:       v.optional(v.string()),
+      dateOfBirth: v.optional(v.string()),
+      bankIban:    v.optional(v.string()),
+      bankBic:     v.optional(v.string()),
+      bankName:    v.optional(v.string()),
+      submittedAt: v.number(),
+    })),
   })
     .index("by_email",        ["email"])
     .index("by_referralCode", ["referralCode"]),

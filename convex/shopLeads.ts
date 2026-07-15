@@ -81,6 +81,19 @@ export const submitLead = mutation({
       wantsBonusStamps: args.wantsBonusStamps,
     });
 
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
+      shopName:      args.shopName,
+      ownerName:     args.ownerName,
+      ownerEmail:    args.ownerEmail,
+      ownerPhone:    args.ownerPhone,
+      city:          args.city,
+      businessType:  args.businessType,
+      planType:      args.planType,
+      affiliateName: affiliate.name,
+      affiliateCode: affiliate.referralCode,
+      viaInvite:     false,
+    });
+
     return leadId;
   },
 });
@@ -170,6 +183,20 @@ export const acceptInvite = mutation({
       action:     "invite_accepted_and_activated",
       actorType:  "affiliate",
       note:       `${args.ownerName} · Plan: ${planType}`,
+    });
+
+    const inviteAffiliate = await ctx.db.get(lead.affiliateId);
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
+      shopName:      args.shopName,
+      ownerName:     args.ownerName,
+      ownerEmail:    args.ownerEmail,
+      ownerPhone:    args.ownerPhone,
+      city:          args.city,
+      businessType:  args.businessType,
+      planType,
+      affiliateName: inviteAffiliate?.name ?? "—",
+      affiliateCode: inviteAffiliate?.referralCode,
+      viaInvite:     true,
     });
 
     return lead._id;
