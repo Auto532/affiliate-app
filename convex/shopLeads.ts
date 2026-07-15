@@ -162,6 +162,26 @@ export const acceptInvite = mutation({
   },
 });
 
+// ── Ausstehenden Shop löschen (nur pending_payment) ──────────────────────────
+
+export const deletePendingLead = mutation({
+  args: { token: v.string(), leadId: v.id("shopLeads") },
+  handler: async (ctx, args) => {
+    const affiliate = await requireAffiliate(ctx, args.token);
+    const lead = await ctx.db.get(args.leadId);
+    if (!lead) throw new Error("Shop nicht gefunden");
+    if (lead.affiliateId !== affiliate._id) throw new Error("Kein Zugriff");
+    if (lead.status !== "pending_payment") throw new Error("Nur ausstehende Shops können gelöscht werden");
+
+    const contract = await ctx.db
+      .query("shopContracts")
+      .withIndex("by_shopLead", q => q.eq("shopLeadId", args.leadId))
+      .unique();
+    if (contract) await ctx.db.delete(contract._id);
+    await ctx.db.delete(args.leadId);
+  },
+});
+
 // ── Meine Shops abrufen ───────────────────────────────────────────────────────
 
 export const myLeads = query({
