@@ -10,6 +10,17 @@ const PP_CLIENT_ID   = process.env.PAYPAL_CLIENT_ID   ?? "";
 const PP_SECRET      = process.env.PAYPAL_CLIENT_SECRET ?? "";
 const APP_URL        = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "http://localhost:3000";
 const PAYPAL_BASE    = "https://api-m.paypal.com";
+const TG_TOKEN       = process.env.TELEGRAM_BOT_TOKEN ?? "";
+const TG_CHAT_ID     = process.env.TELEGRAM_CHAT_ID   ?? "";
+
+async function sendTelegram(text: string): Promise<void> {
+  if (!TG_TOKEN || !TG_CHAT_ID) return;
+  await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+    method:  "POST",
+    headers: { "Content-Type": "application/json" },
+    body:    JSON.stringify({ chat_id: TG_CHAT_ID, text, parse_mode: "HTML" }),
+  }).catch(() => {});
+}
 
 // ── Öffentliche Query: Contract-Info für Zahlungsseite ────────────────────────
 
@@ -135,6 +146,13 @@ export const provisionShop = internalAction({
       loatycardShopSlug:   slug,
       loatycardAdminToken: adminLoginToken,
     });
+
+    await sendTelegram(
+      `🏪 <b>Neuer Shop angelegt!</b>\n\n` +
+      `<b>Shop:</b> ${lead.shopName}\n` +
+      `<b>Slug:</b> ${slug}\n` +
+      `<b>Jetzt einrichten:</b> Design &amp; Bonusprogramm nicht vergessen!`
+    );
   },
 });
 
