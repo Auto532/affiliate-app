@@ -244,13 +244,16 @@ export default defineSchema({
     .index("by_affiliate", ["affiliateId"]),
 
   // ── Support-Anfragen (Partner → Admin, Telegram-Benachrichtigung) ───────────
+  // Admin kann antworten (reply) — der Partner sieht Antwort + Status in der App.
   supportTickets: defineTable({
     affiliateId: v.id("affiliates"),
     message:     v.string(),
     contact:     v.optional(v.string()),
     status:      v.union(v.literal("open"), v.literal("done")),
+    reply:       v.optional(v.string()),
+    repliedAt:   v.optional(v.number()),
     createdAt:   v.number(),
-  }).index("by_status", ["status"]),
+  }).index("by_status", ["status"]).index("by_affiliate", ["affiliateId"]),
 
   // ── Auth-Throttle (Brute-Force-Schutz, C2) ───────────────────────────────────
   authThrottle: defineTable({

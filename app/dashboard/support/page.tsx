@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -22,6 +22,8 @@ export default function SupportPage() {
     if (!t) { router.push("/login"); return; }
     setToken(t);
   }, [router]);
+
+  const myTickets = useQuery(api.support.listMyTickets, token ? { token } : "skip");
 
   if (!token) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -74,6 +76,35 @@ export default function SupportPage() {
             style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>
             {sending ? "Sendet…" : "Nachricht senden"}
           </button>
+        </div>
+      )}
+
+      {/* Bisherige Anfragen inkl. Antwort */}
+      {myTickets && myTickets.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-[rgba(242,237,228,.45)] uppercase tracking-wider">Deine Anfragen</p>
+          {myTickets.map(t => (
+            <div key={t._id} className="rounded-2xl p-4 space-y-1.5" style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.06)" }}>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[10px] text-[rgba(242,237,228,.35)]">
+                  {new Date(t.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                </p>
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                  style={t.status === "open"
+                    ? { background: "rgba(201,162,39,.15)", color: "#c9a227" }
+                    : { background: "rgba(34,197,94,.12)", color: "#4ade80" }}>
+                  {t.status === "open" ? "in Bearbeitung" : "beantwortet"}
+                </span>
+              </div>
+              <p className="text-sm text-[#f2ede4] whitespace-pre-wrap">{t.message}</p>
+              {t.reply && (
+                <div className="rounded-lg px-3 py-2 mt-1" style={{ background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.25)" }}>
+                  <p className="text-[9px] font-semibold text-green-400 mb-0.5">Antwort vom Loatycard-Team</p>
+                  <p className="text-xs text-[rgba(242,237,228,.8)] whitespace-pre-wrap">{t.reply}</p>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

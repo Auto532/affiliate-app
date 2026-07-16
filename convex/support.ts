@@ -1,6 +1,12 @@
-import { mutation, internalAction } from "./_generated/server";
+import { mutation, query, internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+
+function requireAdmin(secret: string) {
+  const expected = process.env.ADMIN_SECRET;
+  if (!expected) throw new Error("ADMIN_SECRET nicht gesetzt");
+  if (secret !== expected) throw new Error("Kein Zugriff");
+}
 
 // Support-Anfrage vom Partner (auth via Session-Token). Wird gespeichert +
 // per Telegram an den Admin geschickt (derselbe Bot wie bei Shop-Leads;
@@ -36,6 +42,55 @@ export const submitTicket = mutation({
       message,
       contact: args.contact?.trim() || undefined,
     });
+  },
+});
+
+// Eigene Anfragen des Partners (inkl. Status + Admin-Antwort)
+export const listMyTickets = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db
+      .query("affiliateSessions")
+      .withIndex("by_token", q => q.eq("token", args.token))
+      .unique();
+    if (!session || session.expiresAt < Date.now()) return null;
+    const tickets = await ctx.db
+      .query("supportTickets")
+      .withIndex("by_affiliate", q => q.eq("affiliateId", session.affiliateId))
+      .collect();
+    return tickets
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .map(t => ({ _id: t._id, message: t.message, status: t.status, reply: t.reply ?? null, repliedAt: t.repliedAt ?? null, createdAt: t.createdAt }));
+  },
+});
+
+// ── Admin: Tickets verwalten ──────────────────────────────────────────────────
+
+export const adminListTickets = query({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, { adminSecret }) => {
+    requireAdmin(adminSecret);
+    const tickets = await ctx.db.query("supportTickets").order("desc").collect();
+    return Promise.all(tickets.map(async t => {
+      const a = await ctx.db.get(t.affiliateId);
+      return { ...t, partnerName: a?.name ?? "(gelöschter Partner)", partnerEmail: a?.email ?? null };
+    }));
+  },
+});
+
+export const adminAnswerTicket = mutation({
+  args: {
+    adminSecret: v.string(),
+    ticketId:    v.id("supportTickets"),
+    reply:       v.optional(v.string()),
+    status:      v.union(v.literal("open"), v.literal("done")),
+  },
+  handler: async (ctx, { adminSecret, ticketId, reply, status }) => {
+    requireAdmin(adminSecret);
+    const patch: Record<string, unknown> = { status };
+    const trimmed = reply?.trim();
+    if (trimmed) { patch.reply = trimmed; patch.repliedAt = Date.now(); }
+    await ctx.db.patch(ticketId, patch);
   },
 });
 
