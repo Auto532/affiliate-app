@@ -574,6 +574,40 @@ export const getEarningsSummary = query({
   },
 });
 
+// ── Finanz-Detail: alle Zahlungen einzeln (für Finanzen-Detailansicht + PDF) ──
+// Jede Zahlung = genau eine Commission-Row. Liefert die flache Liste mit
+// Shop-Name, Plan, gezahltem Betrag und Provision; Gruppierung (Monat/Jahr)
+// macht der Client.
+
+export const getEarningsDetail = query({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const commissions = await ctx.db.query("commissions").collect();
+
+    const payments = await Promise.all(commissions.map(async c => {
+      const contract = await ctx.db.get(c.shopContractId);
+      const lead     = contract ? await ctx.db.get(contract.shopLeadId) : null;
+      const paid     = (c as any).paidAmount ?? c.baseAmount;
+      return {
+        date:             c.triggeredAt,
+        shopName:         lead?.shopName ?? "—",
+        planType:         c.planType,
+        paymentNumber:    c.paymentNumber,
+        paidAmount:       Math.round(paid * 100) / 100,
+        commission:       c.amount,
+        commissionStatus: c.status,
+        direct:           contract?.isDirect === true,
+        discountCode:     (c.paymentNumber === 1 && contract?.discountCode) ? contract.discountCode : null,
+      };
+    }));
+
+    payments.sort((a, b) => b.date - a.date);
+    return payments;
+  },
+});
+
 // ── Vertrag für Lead ─────────────────────────────────────────────────────────
 
 export const getContractForLead = query({
