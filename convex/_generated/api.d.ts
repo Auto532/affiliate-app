@@ -20,6 +20,7 @@ import type * as payments from "../payments.js";
 import type * as pricing from "../pricing.js";
 import type * as rateLimit from "../rateLimit.js";
 import type * as shopLeads from "../shopLeads.js";
+import type * as support from "../support.js";
 import type * as testPayments from "../testPayments.js";
 
 import type {
@@ -41,6 +42,7 @@ declare const fullApi: ApiFromModules<{
   pricing: typeof pricing;
   rateLimit: typeof rateLimit;
   shopLeads: typeof shopLeads;
+  support: typeof support;
   testPayments: typeof testPayments;
 }>;
 
