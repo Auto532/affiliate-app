@@ -1,4 +1,5 @@
 import { mutation, query, internalAction } from "./_generated/server";
+import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 
@@ -55,6 +56,14 @@ function buildThread(t: { message: string; createdAt: number; reply?: string; re
   ];
 }
 
+// Fortlaufende Ticketnummern (#001 = ältestes Ticket, app-weit — Admin und
+// Absender sehen dieselbe Nummer)
+async function ticketNumbers(ctx: QueryCtx): Promise<Map<string, number>> {
+  const all = await ctx.db.query("supportTickets").collect();
+  all.sort((a, b) => a.createdAt - b.createdAt);
+  return new Map(all.map((t, i) => [t._id as string, i + 1]));
+}
+
 // Eigene Anfragen des Partners (kompletter Verlauf + Status)
 export const listMyTickets = query({
   args: { token: v.string() },
@@ -64,13 +73,14 @@ export const listMyTickets = query({
       .withIndex("by_token", q => q.eq("token", args.token))
       .unique();
     if (!session || session.expiresAt < Date.now()) return null;
+    const numbers = await ticketNumbers(ctx);
     const tickets = await ctx.db
       .query("supportTickets")
       .withIndex("by_affiliate", q => q.eq("affiliateId", session.affiliateId))
       .collect();
     return tickets
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map(t => ({ _id: t._id, status: t.status, createdAt: t.createdAt, thread: buildThread(t) }));
+      .map(t => ({ _id: t._id, number: numbers.get(t._id as string) ?? 0, status: t.status, createdAt: t.createdAt, thread: buildThread(t) }));
   },
 });
 
@@ -108,11 +118,13 @@ export const adminListTickets = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, { adminSecret }) => {
     requireAdmin(adminSecret);
+    const numbers = await ticketNumbers(ctx);
     const tickets = await ctx.db.query("supportTickets").order("desc").collect();
     return Promise.all(tickets.map(async t => {
       const a = await ctx.db.get(t.affiliateId);
       return {
-        _id: t._id, contact: t.contact ?? null, status: t.status, createdAt: t.createdAt,
+        _id: t._id, number: numbers.get(t._id as string) ?? 0,
+        contact: t.contact ?? null, status: t.status, createdAt: t.createdAt,
         partnerName: a?.name ?? "(gelöschter Partner)", partnerEmail: a?.email ?? null,
         thread: buildThread(t),
       };

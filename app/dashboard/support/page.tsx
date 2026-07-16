@@ -19,6 +19,7 @@ export default function SupportPage() {
   const [err, setErr]         = useState("");
   const [replyMap, setReplyMap] = useState<Record<string, string>>({});
   const [replyingId, setReplyingId] = useState<string | null>(null);
+  const [expandedT, setExpandedT] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const t = localStorage.getItem("affiliate_token");
@@ -86,12 +87,31 @@ export default function SupportPage() {
       {myTickets && myTickets.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-[rgba(242,237,228,.45)] uppercase tracking-wider">Deine Anfragen</p>
-          {myTickets.map(t => (
+          {myTickets.map(t => {
+            const isTOpen = t.status === "open" || !!expandedT[t._id];
+            const num = `#${String(t.number).padStart(3, "0")}`;
+            if (!isTOpen) {
+              // Abgeschlossen: nur Nummer — Klick öffnet den Verlauf
+              return (
+                <button key={t._id} type="button"
+                  onClick={() => setExpandedT(e => ({ ...e, [t._id]: true }))}
+                  className="w-full rounded-2xl px-4 py-3 flex items-center gap-2 text-left"
+                  style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.06)" }}>
+                  <span className="text-xs font-mono font-bold text-[rgba(242,237,228,.55)]">Ticket {num}</span>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded ml-auto"
+                    style={{ background: "rgba(34,197,94,.12)", color: "#4ade80" }}>abgeschlossen</span>
+                  <span className="text-[10px] text-[rgba(242,237,228,.3)]">▸</span>
+                </button>
+              );
+            }
+            return (
             <div key={t._id} className="rounded-2xl p-4 space-y-2" style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.06)" }}>
               <div className="flex items-center justify-between gap-2">
-                <p className="text-[10px] text-[rgba(242,237,228,.35)]">
-                  {new Date(t.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
-                </p>
+                <button type="button"
+                  onClick={() => { if (t.status !== "open") setExpandedT(e => ({ ...e, [t._id]: false })); }}
+                  className="text-[10px] font-mono font-bold text-left text-[rgba(242,237,228,.45)]">
+                  Ticket {num} · {new Date(t.createdAt).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                </button>
                 <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
                   style={t.status === "open"
                     ? { background: "rgba(201,162,39,.15)", color: "#c9a227" }
@@ -134,7 +154,8 @@ export default function SupportPage() {
                 <p className="text-[10px] text-[rgba(242,237,228,.35)]">Ticket abgeschlossen — bei neuem Anliegen einfach oben eine neue Anfrage senden.</p>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
