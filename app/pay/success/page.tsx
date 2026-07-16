@@ -1,11 +1,22 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 
 function SuccessContent() {
   const params = useSearchParams();
   const method = params.get("method");
+
+  // Test-Zahlung (Admin): nach 1 Sekunde zurück zur Admin-Übersicht, sonst
+  // hängt man auf dieser Seite fest. Echte Zahlungen (Stripe/PayPal) bleiben
+  // hier — Shop-Inhaber sollen nicht im Admin-Panel landen.
+  useEffect(() => {
+    if (method !== "test") return;
+    const base = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "";
+    if (!base) return;
+    const t = setTimeout(() => { window.location.href = `${base}/zk7-verwaltung-9x2`; }, 1000);
+    return () => clearTimeout(t);
+  }, [method]);
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4">
@@ -19,10 +30,14 @@ function SuccessContent() {
         <div>
           <h2 className="text-xl font-bold text-[#f2ede4]">Zahlung erfolgreich</h2>
           <p className="text-sm text-[rgba(242,237,228,.5)] mt-2">
-            {method === "paypal"
-              ? "Deine PayPal-Zahlung wurde bestätigt."
-              : "Deine Kartenzahlung wurde bestätigt."}
-            {" "}Deine Loatycard-Stempelkarte wird in Kürze eingerichtet.
+            {method === "test"
+              ? "Test-Zahlung erfasst. Du wirst zur Übersicht weitergeleitet…"
+              : <>
+                  {method === "paypal"
+                    ? "Deine PayPal-Zahlung wurde bestätigt."
+                    : "Deine Kartenzahlung wurde bestätigt."}
+                  {" "}Deine Loatycard-Stempelkarte wird in Kürze eingerichtet.
+                </>}
           </p>
         </div>
       </div>

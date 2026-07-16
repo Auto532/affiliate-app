@@ -608,6 +608,47 @@ export const getEarningsDetail = query({
   },
 });
 
+// ── Lead zu gelöschtem Shop entfernen (Sync mit Stempelkarten-Admin) ──────────
+// Wird vom Stempelkarten-Admin nach adminDeleteShop aufgerufen: löscht den
+// zugehörigen Lead + Vertrag + Provisionen, damit der Shop auch beim Partner
+// und in den Finanzen verschwindet.
+
+export const deleteLeadForShop = mutation({
+  args: { adminSecret: v.string(), loatycardShopId: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const lead = (await ctx.db.query("shopLeads").collect())
+      .find(l => l.loatycardShopId === args.loatycardShopId);
+    if (!lead) return { deleted: false };
+
+    const contract = await ctx.db
+      .query("shopContracts")
+      .withIndex("by_shopLead", q => q.eq("shopLeadId", lead._id))
+      .unique();
+
+    if (contract) {
+      const commissions = await ctx.db
+        .query("commissions")
+        .withIndex("by_contract", q => q.eq("shopContractId", contract._id))
+        .collect();
+      for (const c of commissions) await ctx.db.delete(c._id);
+      await ctx.db.delete(contract._id);
+    }
+    await ctx.db.delete(lead._id);
+
+    await ctx.db.insert("auditLog", {
+      entityType: "shopLead",
+      entityId:   lead._id,
+      action:     "deleted_with_shop",
+      actorType:  "admin",
+      note:       `${lead.shopName} · Shop-ID: ${args.loatycardShopId} · Vertrag + Provisionen mitgelöscht`,
+    });
+
+    return { deleted: true };
+  },
+});
+
 // ── Vertrag für Lead ─────────────────────────────────────────────────────────
 
 export const getContractForLead = query({
