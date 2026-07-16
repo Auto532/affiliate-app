@@ -243,6 +243,15 @@ export default defineSchema({
     .index("by_token",     ["token"])
     .index("by_affiliate", ["affiliateId"]),
 
+  // ── Support-Anfragen (Partner → Admin, Telegram-Benachrichtigung) ───────────
+  supportTickets: defineTable({
+    affiliateId: v.id("affiliates"),
+    message:     v.string(),
+    contact:     v.optional(v.string()),
+    status:      v.union(v.literal("open"), v.literal("done")),
+    createdAt:   v.number(),
+  }).index("by_status", ["status"]),
+
   // ── Auth-Throttle (Brute-Force-Schutz, C2) ───────────────────────────────────
   authThrottle: defineTable({
     key:         v.string(),           // z.B. "login:mail@x.de"

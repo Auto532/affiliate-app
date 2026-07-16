@@ -73,6 +73,7 @@ export default function DashboardPage() {
         <NavCard href="/dashboard/shops" title="Meine Shops" sub={`${dashboard?.leads.total ?? 0} Shops gesamt`} icon="🏪" />
         <NavCard href="/dashboard/provisionen" title="Provisionen" sub={`€${(c?.totalPaid ?? 0).toFixed(2)} bereits ausgezahlt`} icon="💰" />
         <NavCard href="/dashboard/unterlagen" title="Verkaufsunterlagen" sub="Pitch, Einwände, Design-Beispiele" icon="📚" />
+        <NavCard href="/dashboard/support" title="Support" sub="Problem? Schreib uns direkt" icon="🆘" />
         <NavCard href="/dashboard/profil" title="Mein Profil" sub="Daten & Bankverbindung ändern" icon="👤" />
       </div>
     </div>
