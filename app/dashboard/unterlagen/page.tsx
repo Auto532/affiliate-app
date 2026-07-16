@@ -6,9 +6,11 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import QRCode from "react-qr-code";
 
 const GOLD = "#c9a227";
 const CARD: React.CSSProperties = { background: "#17150f", border: "1px solid rgba(255,255,255,.06)" };
+const DEMO_URL = `${process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de"}/demo`;
 
 // ── Design-Beispiele: Farbpaletten der echten Themes (Mini-Mockups) ───────────
 const DESIGN_EXAMPLES: { name: string; branche: string; accent: string; cardBg: string; text: string; sub: string }[] = [
@@ -84,6 +86,30 @@ const SECTIONS: Section[] = [
           </P>
         </div>
         <P>Das ist dein Elevator Pitch. Auswendig können, natürlich sagen. Danach sofort die Demo: eigenen QR-Code am Handy zeigen und einen Stempel geben lassen — das Produkt verkauft sich visuell.</P>
+      </div>
+    ),
+  },
+  {
+    id: "demo", title: "Live-Demo zum Scannen", icon: "📱",
+    body: (
+      <div className="space-y-3">
+        <P>
+          Dein stärkstes Werkzeug im Gespräch: Lass den Inhaber diesen QR-Code <b>mit seiner
+          normalen Handy-Kamera</b> scannen — keine App, keine Registrierung, nichts zu kaufen.
+          Er bekommt sofort eine <b>interaktive Stempelkarte</b>: selbst Stempel geben, die
+          Animation sehen und oben <b>alle Designs durchschalten</b> (inkl. der Custom-Beispiele).
+        </P>
+        <div className="flex justify-center py-2">
+          <div className="bg-white rounded-2xl p-3">
+            <QRCode value={DEMO_URL} size={168} />
+          </div>
+        </div>
+        <p className="text-center text-[10px] font-mono text-[rgba(242,237,228,.35)] break-all">{DEMO_URL}</p>
+        <P>
+          Der Moment dafür: direkt nach dem Pitch. <b>„Scannen Sie mal — genau das sehen Ihre
+          Kunden."</b> Ab da verkauft sich das Produkt selbst, und der Design-Umschalter ist die
+          perfekte Überleitung zum Custom Design für 99 €.
+        </P>
       </div>
     ),
   },
