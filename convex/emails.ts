@@ -180,7 +180,30 @@ export const sendWelcomeEmail = internalAction({
 </body>
 </html>`;
 
-    await fetch("https://api.resend.com/emails", {
+    const text = [
+      `Herzlich willkommen, ${args.ownerName}!`,
+      ``,
+      `Schön, dass du dabei bist! Dein Shop "${args.shopName}" ist bei uns registriert`,
+      `und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte`,
+      `schnell und reibungslos an den Start geht.`,
+      ``,
+      `Dein Paket: ${planLabel}`,
+      ...(extras.length ? [``, `Deine gewählten Extras:`, ...extras.map(e => `- ${e}`)] : []),
+      ``,
+      `Bitte halte diese Angaben bereit:`,
+      `- Impressum (Firmenname, Inhaber, Anschrift, Kontakt)`,
+      `- AGB deines Shops (falls vorhanden)`,
+      `- Datenschutzerklärung bzw. Datenschutz-Kontakt`,
+      ``,
+      `Bei Fragen erreichst du uns jederzeit per WhatsApp oder Anruf: ${WHATSAPP_NR}`,
+      ``,
+      `Wir freuen uns darauf, gemeinsam mit dir mehr Stammkunden zu gewinnen!`,
+      ``,
+      `Dein Loatycard-Team`,
+      `Loatycard · Digitale Stempelkarten für lokale Shops`,
+    ].join("\n");
+
+    const res = await fetch("https://api.resend.com/emails", {
       method:  "POST",
       headers: {
         "Authorization": `Bearer ${RESEND_KEY}`,
@@ -191,7 +214,11 @@ export const sendWelcomeEmail = internalAction({
         to:      [args.ownerEmail],
         subject: `Willkommen bei Loatycard – ${args.shopName} ist registriert`,
         html,
+        text,
       }),
     });
+    if (!res.ok) {
+      console.error(`Resend-Fehler ${res.status}: ${await res.text()}`);
+    }
   },
 });
