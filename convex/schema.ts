@@ -250,8 +250,15 @@ export default defineSchema({
     message:     v.string(),
     contact:     v.optional(v.string()),
     status:      v.union(v.literal("open"), v.literal("done")),
+    // Legacy-Einzelantwort (vor Thread-Umbau) — wird beim Anzeigen in den Thread gemerged
     reply:       v.optional(v.string()),
     repliedAt:   v.optional(v.number()),
+    // Konversation: alle Nachrichten NACH der Erstnachricht (message-Feld)
+    thread:      v.optional(v.array(v.object({
+      from: v.union(v.literal("user"), v.literal("admin")),
+      text: v.string(),
+      at:   v.number(),
+    }))),
     createdAt:   v.number(),
   }).index("by_status", ["status"]).index("by_affiliate", ["affiliateId"]),
 
