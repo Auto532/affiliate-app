@@ -1,6 +1,7 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { PLAN_PRICES } from "./pricing";
+import { escapeHtml } from "./htmlEscape";
 
 const RESEND_KEY  = process.env.RESEND_API_KEY ?? "";
 const FROM_EMAIL  = process.env.RESEND_FROM_EMAIL ?? "Loatycard <onboarding@resend.dev>";
@@ -78,10 +79,10 @@ export const sendWelcomeEmail = internalAction({
     <tr>
       <td style="padding:36px 32px 20px 32px;">
         <h1 style="margin:0 0 16px 0;font-size:22px;color:#0d0c0a;font-weight:800;">
-          Herzlich willkommen, ${args.ownerName}!
+          Herzlich willkommen, ${escapeHtml(args.ownerName)}!
         </h1>
         <p style="margin:0;color:#555;font-size:15px;line-height:1.75;">
-          Schön, dass du dabei bist! Dein Shop <strong style="color:#0d0c0a;">${args.shopName}</strong>
+          Schön, dass du dabei bist! Dein Shop <strong style="color:#0d0c0a;">${escapeHtml(args.shopName)}</strong>
           ist bei uns registriert und wir kümmern uns ab sofort darum, dass deine
           digitale Stempelkarte schnell und reibungslos an den Start geht.
         </p>
