@@ -107,6 +107,33 @@ export const sendWelcomeEmail = internalAction({
     ${extrasSection}
     ${designSection}
 
+    <!-- Rechtliche Unterlagen -->
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0"
+          style="background:#f9f7f3;border-radius:12px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#0d0c0a;text-transform:uppercase;letter-spacing:1px;">
+              Bitte halte diese Angaben bereit
+            </p>
+            <p style="margin:6px 0;color:#444;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Impressum (Firmenname, Inhaber, Anschrift, Kontakt)
+            </p>
+            <p style="margin:6px 0;color:#444;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; AGB deines Shops (falls vorhanden)
+            </p>
+            <p style="margin:6px 0;color:#444;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Datenschutzerkl&auml;rung bzw. Datenschutz-Kontakt
+            </p>
+            <p style="margin:12px 0 0 0;color:#888;font-size:13px;line-height:1.6;">
+              Diese Angaben brauchen wir, damit deine Stempelkarte rechtlich sauber
+              online gehen kann. Kein Stress &ndash; wir gehen alles gemeinsam mit dir durch.
+            </p>
+          </td></tr>
+        </table>
+      </td>
+    </tr>
+
     <!-- What happens next -->
     <tr>
       <td style="padding:0 32px 28px 32px;">
