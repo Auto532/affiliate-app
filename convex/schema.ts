@@ -40,6 +40,7 @@ export default defineSchema({
     pendingProfile: v.optional(v.object({
       name:        v.optional(v.string()),
       company:     v.optional(v.string()),
+      businessType: v.optional(v.union(v.literal("private"), v.literal("business"))),
       taxId:       v.optional(v.string()),
       vatId:       v.optional(v.string()),
       dateOfBirth: v.optional(v.string()),

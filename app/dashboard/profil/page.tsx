@@ -8,13 +8,14 @@ import Link from "next/link";
 
 // Felder, die sofort übernommen werden vs. die auf Admin-Freigabe warten.
 const IMMEDIATE = ["phone", "address", "zip", "city", "country"] as const;
-const SENSITIVE = ["name", "company", "taxId", "vatId", "dateOfBirth", "bankIban", "bankBic", "bankName"] as const;
+const SENSITIVE = ["name", "company", "taxId", "vatId", "dateOfBirth", "bankIban", "bankBic", "bankName", "businessType"] as const;
 type FieldKey = (typeof IMMEDIATE)[number] | (typeof SENSITIVE)[number];
 
 const LABELS: Record<FieldKey, string> = {
   name: "Name", company: "Firmenname", taxId: "Steuernummer", vatId: "USt-IdNr.",
   dateOfBirth: "Geburtsdatum", bankIban: "IBAN", bankBic: "BIC / SWIFT", bankName: "Bankname",
   phone: "Telefon", address: "Straße + Hausnummer", zip: "PLZ", city: "Stadt", country: "Land",
+  businessType: "Kontotyp (Privat/Gewerbe)",
 };
 
 const GROUPS: { title: string; note?: string; fields: FieldKey[] }[] = [
@@ -50,6 +51,7 @@ export default function ProfilePage() {
       const pendingVal = pending && k in pending ? pending[k] : undefined;
       init[k] = (pendingVal ?? (profile as any)[k] ?? "") as string;
     }
+    if (!init.businessType) init.businessType = "private"; // Default: Privat
     setForm(init);
   }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -71,9 +73,12 @@ export default function ProfilePage() {
   const handleSave = async () => {
     setSaving(true); setMsg(null);
     try {
+      const textFields = [...IMMEDIATE, ...SENSITIVE].filter(k => k !== "businessType");
       const res = await update({
         token: token!,
-        ...Object.fromEntries([...IMMEDIATE, ...SENSITIVE].map(k => [k, form[k]?.trim() || undefined])),
+        ...Object.fromEntries(textFields.map(k => [k, form[k]?.trim() || undefined])),
+        businessType: form.businessType === "business" ? "business"
+          : form.businessType === "private" ? "private" : undefined,
       });
       if (res.pending) {
         setMsg({ ok: true, text: `Gespeichert. ${res.pendingFields.length} Änderung(en) warten auf Freigabe: ${res.pendingFields.map(k => LABELS[k as FieldKey]).join(", ")}.` });
@@ -119,6 +124,34 @@ export default function ProfilePage() {
             <p className="text-sm font-semibold text-[#f2ede4]">{group.title}</p>
             {group.note && <p className="text-[11px] text-[rgba(242,237,228,.35)]">{group.note}</p>}
           </div>
+          {group.title === "Rechtliches" && (
+            <div>
+              <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">
+                Kontotyp
+                {pending && "businessType" in pending && (
+                  <span className="ml-2 text-[10px] text-yellow-400">· wartet auf Freigabe</span>
+                )}
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { id: "private",  label: "Privat" },
+                  { id: "business", label: "Gewerbe" },
+                ] as const).map(opt => (
+                  <button key={opt.id} type="button"
+                    onClick={() => setForm(f => ({ ...f, businessType: opt.id }))}
+                    className="py-2.5 rounded-xl text-sm font-semibold transition-colors"
+                    style={form.businessType === opt.id
+                      ? { background: "rgba(201,162,39,.15)", border: "1px solid rgba(201,162,39,.5)", color: "#e8c96a" }
+                      : { background: "#0d0c0a", border: "1px solid rgba(255,255,255,.08)", color: "rgba(242,237,228,.5)" }}>
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-[rgba(242,237,228,.3)] mt-1.5">
+                Ein Wechsel des Kontotyps braucht unsere Freigabe. Wenn du Firmenname oder USt-IdNr. einträgst, wird automatisch ein Wechsel zu Gewerbe beantragt.
+              </p>
+            </div>
+          )}
           {group.fields.map(k => (
             <div key={k}>
               <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">

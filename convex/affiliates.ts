@@ -231,6 +231,7 @@ export const updateOwnProfile = mutation({
     bankIban:    v.optional(v.string()),
     bankBic:     v.optional(v.string()),
     bankName:    v.optional(v.string()),
+    businessType: v.optional(v.union(v.literal("private"), v.literal("business"))),
   },
   handler: async (ctx, args) => {
     const affiliate = await affiliateFromToken(ctx, args.token);
@@ -250,6 +251,24 @@ export const updateOwnProfile = mutation({
         hasPending = true;
       }
     }
+
+    // Kontotyp (privat/geschäftlich): freigabepflichtig. Zusätzlich automatische
+    // Erkennung — trägt ein Privat-Partner Firmenname oder USt-IdNr. ein, ist das
+    // faktisch ein Wechsel zu "geschäftlich" (nur Hochstufung, nie automatisch zurück).
+    const currentType = affiliate.businessType ?? "private";
+    let requestedType = args.businessType;
+    if (requestedType === undefined && currentType === "private") {
+      const businessSignal = (["company", "vatId"] as const).some(k => {
+        const val = args[k];
+        return typeof val === "string" && val.trim() !== "" && val !== (affiliate as any)[k];
+      });
+      if (businessSignal) requestedType = "business";
+    }
+    if (requestedType !== undefined && requestedType !== currentType) {
+      pending.businessType = requestedType;
+      hasPending = true;
+    }
+
     if (hasPending) patch.pendingProfile = { ...pending, submittedAt: Date.now() };
 
     await ctx.db.patch(affiliate._id, patch);
