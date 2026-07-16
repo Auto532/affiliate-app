@@ -36,10 +36,7 @@ export interface DiscountDef {
 }
 
 export const DISCOUNT_CODES: Record<string, DiscountDef> = {
-  // ⚠️ TEST (2026-07-15): firstPaymentCommissionRate 0.5 = Partner bekommt einmalig
-  // 50% Provision auf die erste Zahlung. Zum Zurückdrehen einfach die Zeile entfernen
-  // → dann greift wieder die normale Regel (20% initial).
-  LOYAL50: { firstYearDiscount: 0.5, label: "50 % auf das erste Jahr", firstPaymentCommissionRate: 0.5 },
+  LOYAL50: { firstYearDiscount: 0.5, label: "50 % auf das erste Jahr" },
 };
 
 export function lookupDiscount(code: string): DiscountDef | null {
