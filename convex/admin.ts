@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
 
@@ -128,7 +129,121 @@ export const listAffiliates = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
-    return ctx.db.query("affiliates").collect();
+    // System-Partner "Direktvertrieb" (Admin-Shops) nicht in der Partner-Liste zeigen
+    const all = await ctx.db.query("affiliates").collect();
+    return all.filter(a => a.referralCode !== "DIRECT");
+  },
+});
+
+// ── Direktvertrieb: Admin legt Shop ohne Partner an ───────────────────────────
+// Registriert einen bereits in der Stempelkarten-App erstellten Shop im
+// Partnerprogramm (Lead + Vertrag), damit Zahlungen normal über /pay/[token]
+// laufen und der Umsatz in den Finanzen auftaucht. Provision: 0% (isDirect).
+// Alle Direkt-Shops hängen am System-Partner mit referralCode "DIRECT".
+
+async function getOrCreateDirectAffiliate(ctx: any) {
+  const existing = await ctx.db
+    .query("affiliates")
+    .withIndex("by_referralCode", (q: any) => q.eq("referralCode", "DIRECT"))
+    .unique();
+  if (existing) return existing;
+
+  const salt = newSalt();
+  const id = await ctx.db.insert("affiliates", {
+    name:         "Direktvertrieb (Admin)",
+    email:        "direkt@loatycard.de",
+    // Zufälliger Hash — mit diesem Konto kann sich niemand einloggen.
+    passwordHash: await derivePasswordHash(crypto.randomUUID(), salt),
+    passwordSalt: salt,
+    referralCode: "DIRECT",
+    status:       "active" as const,
+    // Rabattcodes (z.B. LOYAL50) sollen für Admin-Shops immer eingebbar sein
+    discountEligible: true,
+  });
+  return ctx.db.get(id);
+}
+
+export const createDirectShopContract = mutation({
+  args: {
+    adminSecret:         v.string(),
+    shopName:            v.string(),
+    ownerName:           v.optional(v.string()),
+    ownerEmail:          v.optional(v.string()),
+    ownerPhone:          v.optional(v.string()),
+    city:                v.optional(v.string()),
+    businessType:        v.optional(v.string()),
+    planType:            v.union(v.literal("annual"), v.literal("monthly")),
+    loatycardShopId:     v.string(),
+    loatycardShopSlug:   v.string(),
+    loatycardAdminToken: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    if (args.ownerEmail) {
+      const dupe = await ctx.db
+        .query("shopLeads")
+        .withIndex("by_ownerEmail", q => q.eq("ownerEmail", args.ownerEmail!))
+        .unique();
+      if (dupe) throw new Error("Ein Shop mit dieser Inhaber-E-Mail existiert bereits im Partnerprogramm");
+    }
+
+    const affiliate = await getOrCreateDirectAffiliate(ctx);
+    const now = Date.now();
+
+    const leadId = await ctx.db.insert("shopLeads", {
+      affiliateId:  affiliate._id,
+      shopName:     args.shopName,
+      ownerName:    args.ownerName ?? "",
+      ownerEmail:   args.ownerEmail ?? "",
+      ownerPhone:   args.ownerPhone,
+      businessType: args.businessType,
+      city:         args.city,
+      source:       "admin_direct",
+      // Shop existiert bereits in der Stempelkarten-App → direkt aktiv,
+      // provisionShop überspringt ihn (loatycardShopId gesetzt).
+      status:              "active",
+      approvedAt:          now,
+      approvedBy:          "admin",
+      loatycardShopId:     args.loatycardShopId,
+      loatycardShopSlug:   args.loatycardShopSlug,
+      loatycardAdminToken: args.loatycardAdminToken,
+    });
+
+    const paymentToken = crypto.randomUUID();
+    await ctx.db.insert("shopContracts", {
+      shopLeadId:    leadId,
+      affiliateId:   affiliate._id,
+      planType:      args.planType,
+      contractStart: now,
+      status:        "active",
+      paymentCount:  0,
+      paymentToken,
+      isDirect:      true,
+    });
+
+    await ctx.db.insert("auditLog", {
+      entityType: "shopLead",
+      entityId:   leadId,
+      action:     "admin_direct_created",
+      actorType:  "admin",
+      note:       `${args.shopName} · Plan: ${args.planType} · Shop-ID: ${args.loatycardShopId}`,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
+      shopName:      args.shopName,
+      ownerName:     args.ownerName ?? "—",
+      ownerEmail:    args.ownerEmail,
+      ownerPhone:    args.ownerPhone,
+      city:          args.city,
+      businessType:  args.businessType,
+      planType:      args.planType,
+      affiliateName: "Admin (Direktvertrieb)",
+      viaInvite:     false,
+      direct:        true,
+    });
+
+    return { paymentToken };
   },
 });
 

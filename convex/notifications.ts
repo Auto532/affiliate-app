@@ -30,6 +30,7 @@ export const notifyNewShopLead = internalAction({
     affiliateName: v.string(),
     affiliateCode: v.optional(v.string()),
     viaInvite:     v.boolean(),
+    direct:        v.optional(v.boolean()),   // Admin hat den Shop direkt angelegt
   },
   handler: async (_ctx, args): Promise<void> => {
     const planLabel = args.planType === "annual"
@@ -39,8 +40,14 @@ export const notifyNewShopLead = internalAction({
     const line = (emoji: string, label: string, val?: string) =>
       val ? `\n${emoji} <b>${label}:</b> ${val}` : "";
 
+    const partnerBlock = args.direct
+      ? `🏢 <b>Weg:</b> Admin direkt (ohne Partner, keine Provision)`
+      : `🤝 <b>Partner:</b> ${args.affiliateName}` +
+        (args.affiliateCode ? ` (${args.affiliateCode})` : "") +
+        `\n📥 <b>Weg:</b> ${args.viaInvite ? "Einladungslink" : "Partner-Formular"}`;
+
     await sendTelegram(
-      `🆕 <b>Neuer Shop-Lead</b>\n\n` +
+      `🆕 <b>${args.direct ? "Neuer Shop (Admin direkt)" : "Neuer Shop-Lead"}</b>\n\n` +
       `🏪 <b>Shop:</b> ${args.shopName}\n` +
       `👤 <b>Inhaber:</b> ${args.ownerName}` +
       line("✉️", "E-Mail", args.ownerEmail) +
@@ -48,9 +55,7 @@ export const notifyNewShopLead = internalAction({
       line("📍", "Stadt", args.city) +
       line("🏷", "Branche", args.businessType) +
       `\n💳 <b>Modell:</b> ${planLabel}\n\n` +
-      `🤝 <b>Partner:</b> ${args.affiliateName}` +
-      (args.affiliateCode ? ` (${args.affiliateCode})` : "") +
-      `\n📥 <b>Weg:</b> ${args.viaInvite ? "Einladungslink" : "Partner-Formular"}` +
+      partnerBlock +
       `\n\n⏳ Wartet auf Zahlung.`
     );
   },

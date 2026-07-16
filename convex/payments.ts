@@ -110,9 +110,12 @@ export const autoRecordPayment = internalMutation({
 
     // Provisions-Rate: normal aus commissionEngine. Ein Rabattcode kann die Rate
     // der ERSTEN Zahlung einmalig überschreiben (z.B. LOYAL50 = 50%). Ab Zahlung #2
-    // gilt wieder die normale Regel.
+    // gilt wieder die normale Regel. Direktvertrieb (Admin-Shop ohne Partner):
+    // immer Rate 0 — die Commission-Row dient nur der Umsatz-Erfassung.
     let rate = rule.rate;
-    if (isFirst && contract.discountCode) {
+    if (contract.isDirect) {
+      rate = 0;
+    } else if (isFirst && contract.discountCode) {
       const override = lookupDiscount(contract.discountCode)?.firstPaymentCommissionRate;
       if (override !== undefined) rate = override;
     }

@@ -68,6 +68,7 @@ export default defineSchema({
       v.literal("direct_form"),         // Affiliate hat Formular ausgefüllt
       v.literal("invite_link"),         // Inhaber hat Einladungslink genutzt
       v.literal("referral_link"),       // Inhaber hat sich selbst registriert
+      v.literal("admin_direct"),        // Admin hat den Shop direkt angelegt (ohne Partner)
     ),
 
     status:        v.union(
@@ -120,6 +121,11 @@ export default defineSchema({
     paymentCount:  v.number(),
     canceledAt:    v.optional(v.number()),
     paymentToken:  v.optional(v.string()),
+
+    // Direktvertrieb: Vertrag wurde vom Admin ohne Partner angelegt.
+    // Zahlungen erzeugen weiterhin Commission-Rows (für den Umsatz in den
+    // Finanzen), aber mit Rate 0 — es gibt keinen Partner, der Provision bekommt.
+    isDirect:      v.optional(v.boolean()),
 
     // Rabatt auf das erste Jahr (Testmodus). An die ERSTE Abrechnungsperiode
     // gekoppelt (paymentNumber === 1) → bildet später Stripe coupon duration:"once" ab.
