@@ -5,6 +5,7 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { planPrice } from "./pricing";
+import { escapeHtml } from "./htmlEscape";
 
 const TG_TOKEN   = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID   ?? "";
@@ -38,18 +39,18 @@ export const notifyNewShopLead = internalAction({
       : `Monatsabo (€${planPrice("monthly")})`;
 
     const line = (emoji: string, label: string, val?: string) =>
-      val ? `\n${emoji} <b>${label}:</b> ${val}` : "";
+      val ? `\n${emoji} <b>${label}:</b> ${escapeHtml(val)}` : "";
 
     const partnerBlock = args.direct
       ? `🏢 <b>Weg:</b> Admin direkt (ohne Partner, keine Provision)`
-      : `🤝 <b>Partner:</b> ${args.affiliateName}` +
-        (args.affiliateCode ? ` (${args.affiliateCode})` : "") +
+      : `🤝 <b>Partner:</b> ${escapeHtml(args.affiliateName)}` +
+        (args.affiliateCode ? ` (${escapeHtml(args.affiliateCode)})` : "") +
         `\n📥 <b>Weg:</b> ${args.viaInvite ? "Einladungslink" : "Partner-Formular"}`;
 
     await sendTelegram(
       `🆕 <b>${args.direct ? "Neuer Shop (Admin direkt)" : "Neuer Shop-Lead"}</b>\n\n` +
-      `🏪 <b>Shop:</b> ${args.shopName}\n` +
-      `👤 <b>Inhaber:</b> ${args.ownerName}` +
+      `🏪 <b>Shop:</b> ${escapeHtml(args.shopName)}\n` +
+      `👤 <b>Inhaber:</b> ${escapeHtml(args.ownerName)}` +
       line("✉️", "E-Mail", args.ownerEmail) +
       line("📞", "Telefon", args.ownerPhone) +
       line("📍", "Stadt", args.city) +

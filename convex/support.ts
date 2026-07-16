@@ -2,6 +2,7 @@ import { mutation, query, internalAction } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { escapeHtml } from "./htmlEscape";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
@@ -166,9 +167,9 @@ export const notifySupportTelegram = internalAction({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         chat_id: chatId, parse_mode: "HTML",
-        text: `🆘 <b>Support-Anfrage</b>\n\n👤 <b>Von:</b> ${args.from}` +
-          (args.contact ? `\n📞 <b>Kontakt:</b> ${args.contact}` : "") +
-          `\n\n💬 ${args.message}`,
+        text: `🆘 <b>Support-Anfrage</b>\n\n👤 <b>Von:</b> ${escapeHtml(args.from)}` +
+          (args.contact ? `\n📞 <b>Kontakt:</b> ${escapeHtml(args.contact)}` : "") +
+          `\n\n💬 ${escapeHtml(args.message)}`,
       }),
     }).catch(() => {});
   },

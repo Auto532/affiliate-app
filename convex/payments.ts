@@ -5,6 +5,7 @@ import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
 import { planPrice } from "./pricing";
 import { lookupDiscount } from "./discounts";
+import { escapeHtml } from "./htmlEscape";
 
 // Provisions-Basis: "paid" = Provision auf tatsächlich gezahlten Betrag (Default),
 // "full" = auf den vollen Listenpreis. Serverseitiger Flag, nie aus dem Client.
@@ -273,18 +274,18 @@ export const provisionShop = internalAction({
     });
 
     const planLabel  = lead.planType === "annual" ? `Jahresabo (€${planPrice("annual")})` : `Monatsabo (€${planPrice("monthly")})`;
-    const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${lead.ownerPhone}`   : "";
-    const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${lead.city}`            : "";
-    const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${lead.businessType}` : "";
+    const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${escapeHtml(lead.ownerPhone)}`   : "";
+    const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${escapeHtml(lead.city)}`            : "";
+    const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${escapeHtml(lead.businessType)}` : "";
 
     await sendTelegram(
       `🏪 <b>Neuer Shop ist live!</b>\n\n` +
-      `<b>Shop:</b> ${lead.shopName}\n` +
-      `<b>Slug:</b> ${slug}\n` +
+      `<b>Shop:</b> ${escapeHtml(lead.shopName)}\n` +
+      `<b>Slug:</b> ${escapeHtml(slug)}\n` +
       `<b>Shop-ID:</b> <code>${shopId}</code>\n\n` +
       `<b>Modell:</b> ${planLabel}\n\n` +
-      `👤 <b>Inhaber:</b> ${lead.ownerName}\n` +
-      `✉️ <b>E-Mail:</b> ${lead.ownerEmail}` +
+      `👤 <b>Inhaber:</b> ${escapeHtml(lead.ownerName)}\n` +
+      `✉️ <b>E-Mail:</b> ${escapeHtml(lead.ownerEmail)}` +
       phoneLine + cityLine + branchLine +
       `\n\n⚙️ Design &amp; Bonusprogramm einrichten nicht vergessen!`
     );
