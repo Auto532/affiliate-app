@@ -324,7 +324,9 @@ export const getAllLeads = query({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const leads = await ctx.db.query("shopLeads").order("desc").collect();
-    return Promise.all(leads.map(async lead => {
+    // Admin-Direkt-Shops sind keine Partner-Leads → nicht im Partner-Bereich zeigen
+    const partnerLeads = leads.filter(l => l.source !== "admin_direct");
+    return Promise.all(partnerLeads.map(async lead => {
       const affiliate = await ctx.db.get(lead.affiliateId);
       return { ...lead, affiliateName: affiliate?.name ?? "—" };
     }));
@@ -683,11 +685,15 @@ export const getAdminDashboard = query({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
 
-    const [leads, affiliates, commissions] = await Promise.all([
+    const [allLeads, allAffiliates, commissions] = await Promise.all([
       ctx.db.query("shopLeads").collect(),
       ctx.db.query("affiliates").collect(),
       ctx.db.query("commissions").collect(),
     ]);
+
+    // Direktvertrieb (Admin) zählt nicht als Partner-Aktivität
+    const leads      = allLeads.filter(l => l.source !== "admin_direct");
+    const affiliates = allAffiliates.filter(a => a.referralCode !== "DIRECT");
 
     return {
       leads: {
