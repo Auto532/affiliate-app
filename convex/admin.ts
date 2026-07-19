@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
+import { recurringPrice } from "./pricing";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
@@ -570,7 +571,18 @@ export const getEarningsSummary = query({
     const commPaid      = commissions.filter(c => c.status === "paid")     .reduce((s, c) => s + c.amount, 0);
     const commTotal     = commPending + commConfirmed + commPaid;
 
-    const activeContracts = contracts.filter(c => c.status === "active").length;
+    // Vertrags-Aufschlüsselung: „wirklich aktiv" heißt mindestens eine Zahlung.
+    // Aktive Verträge ohne Zahlung warten noch auf den Bezahllink.
+    const active  = contracts.filter(c => c.status === "active");
+    const paying  = active.filter(c => c.paymentCount > 0);
+    const payingMonthly = paying.filter(c => c.planType === "monthly");
+    const payingAnnual  = paying.filter(c => c.planType === "annual");
+
+    // Laufender Abo-Umsatz aus zahlenden Verträgen (Listenpreise inkl.
+    // Bonusprogramm, ohne Erstjahr-Rabatt): Jahresabos anteilig mit 1/12.
+    const monthlyRunRate =
+      payingMonthly.reduce((s, c) => s + recurringPrice("monthly", c.rewardCount ?? 0), 0) +
+      payingAnnual .reduce((s, c) => s + recurringPrice("annual",  c.rewardCount ?? 0) / 12, 0);
 
     return {
       revenueTotal:   Math.round(revenueTotal   * 100) / 100,
@@ -579,7 +591,14 @@ export const getEarningsSummary = query({
       commConfirmed:  Math.round(commConfirmed   * 100) / 100,
       commPaid:       Math.round(commPaid        * 100) / 100,
       netEarnings:    Math.round((revenueTotal - commTotal) * 100) / 100,
-      activeContracts,
+      activeContracts: active.length,
+      payingContracts: paying.length,
+      payingMonthly:   payingMonthly.length,
+      payingAnnual:    payingAnnual.length,
+      awaitingPayment: active.length - paying.length,
+      canceledContracts: contracts.filter(c => c.status === "canceled").length,
+      monthlyRunRate:  Math.round(monthlyRunRate * 100) / 100,
+      yearlyRunRate:   Math.round(monthlyRunRate * 12 * 100) / 100,
     };
   },
 });
