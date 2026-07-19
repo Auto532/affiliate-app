@@ -1,7 +1,8 @@
 "use client";
 
-// Verkaufsunterlagen für Partner: Pitch, Einwände, Argumente, Verhalten,
-// Ablauf eines Abschlusses und Design-Beispiele zum Zeigen im Gespräch.
+// Verkaufsunterlagen für Partner: Pitch, Einwände, Argumente, Verhalten
+// und Ablauf eines Abschlusses. Design-Beispiele zeigt die Live-Demo
+// (Design-Umschalter, inkl. Signature-Designs gegen Aufpreis).
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -11,36 +12,6 @@ import QRCode from "react-qr-code";
 const GOLD = "#c9a227";
 const CARD: React.CSSProperties = { background: "#17150f", border: "1px solid rgba(255,255,255,.06)" };
 const DEMO_URL = `${process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de"}/demo`;
-
-// ── Design-Beispiele: Farbpaletten der echten Themes (Mini-Mockups) ───────────
-const DESIGN_EXAMPLES: { name: string; branche: string; accent: string; cardBg: string; text: string; sub: string }[] = [
-  { name: "Beate's Grill", branche: "Imbiss / Grill",    accent: "#E8A020", cardBg: "#120900", text: "#F5E8C0", sub: "#A06815" },
-  { name: "Asia Taste",    branche: "Restaurant",        accent: "#cf6a35", cardBg: "#131a15", text: "#f2ead4", sub: "#85907f" },
-  { name: "Barbershop",    branche: "Friseur / Barber",  accent: "#d7d2c6", cardBg: "#141414", text: "#f1e9d6", sub: "#8d877b" },
-  { name: "Block 13",      branche: "Shisha / Lounge",   accent: "#c9a227", cardBg: "#17150f", text: "#f2ede4", sub: "#8a6f1b" },
-  { name: "Entenhaus",     branche: "Restaurant",        accent: "#C9A560", cardBg: "#1C100B", text: "#F0E4CC", sub: "#7E6738" },
-  { name: "Eiszauber",     branche: "Eisdiele",          accent: "#ff4fa0", cardBg: "#fffafe", text: "#2c1020", sub: "#c93d82" },
-  { name: "Bäckerei",      branche: "Bäckerei",          accent: "#d97706", cardBg: "#fffbeb", text: "#451a03", sub: "#b45309" },
-  { name: "Ozean",         branche: "Beispiel-Vorlage",  accent: "#60a5fa", cardBg: "#0f172a", text: "#eff6ff", sub: "#94a3b8" },
-];
-
-function MiniCard({ d }: { d: (typeof DESIGN_EXAMPLES)[number] }) {
-  return (
-    <div className="rounded-xl p-3" style={{ background: d.cardBg, border: `1px solid ${d.accent}44` }}>
-      <p className="text-[8px] font-semibold uppercase tracking-[0.18em]" style={{ color: d.sub }}>Stempelkarte</p>
-      <p className="text-xs font-bold leading-tight mb-2 truncate" style={{ color: d.text }}>{d.name}</p>
-      <div className="flex gap-1 mb-1.5">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <span key={i} className="w-3 h-3 rounded-full"
-            style={i < 4
-              ? { background: d.accent, boxShadow: `0 0 4px ${d.accent}66` }
-              : { border: `1px solid ${d.accent}55` }} />
-        ))}
-      </div>
-      <p className="text-[8px]" style={{ color: d.sub }}>{d.branche}</p>
-    </div>
-  );
-}
 
 // ── Inhalte ───────────────────────────────────────────────────────────────────
 
@@ -97,7 +68,13 @@ const SECTIONS: Section[] = [
           Dein stärkstes Werkzeug im Gespräch: Lass den Inhaber diesen QR-Code <b>mit seiner
           normalen Handy-Kamera</b> scannen: keine App, keine Registrierung, nichts zu kaufen.
           Er bekommt sofort eine <b>interaktive Stempelkarte</b>: selbst Stempel geben, die
-          Animation sehen und oben <b>alle Designs durchschalten</b> (inkl. der Custom-Beispiele).
+          Animation sehen und oben <b>alle Designs durchschalten</b>.
+        </P>
+        <P>
+          Die Demo unterscheidet zwei Gruppen: die <b>normalen Designs</b> (eigenes Logo,
+          eigene Farben) sind mit der Einrichtung im Preis enthalten. Die <b>Signature-Designs</b>
+          sind von Hand gestaltete Premium-Looks und kosten extra. Preis auf Anfrage, keine
+          Zusagen im Gespräch machen.
         </P>
         <div className="flex justify-center py-2">
           <div className="bg-white rounded-2xl p-3">
@@ -122,7 +99,7 @@ const SECTIONS: Section[] = [
         <H>2. Bedarf wecken</H>
         <P>Fragen stellen statt reden: „Haben Sie Stempelkarten? Wie viele kommen ausgefüllt zurück? Wissen Sie, wer Ihre 20 besten Kunden sind? Fast niemand weiß es. Genau da setzt du an.</P>
         <H>3. Demo</H>
-        <P>Dein Handy raus, Karte zeigen, Stempel-Animation zeigen. Dann: „So sieht das mit Ihrem Logo und Ihren Farben aus, dazu die Design-Beispiele (unten) zeigen.</P>
+        <P>Dein Handy raus, Karte zeigen, Stempel-Animation zeigen. Dann: „So sieht das mit Ihrem Logo und Ihren Farben aus", dazu in der Live-Demo die Designs durchschalten.</P>
         <H>4. Abschluss</H>
         <P>„Die Einrichtung übernehmen komplett wir. Sie bekommen den fertigen QR-Aufsteller-Code und Ihren Zugang. Sollen wir das direkt anlegen? Formular gemeinsam ausfüllen oder Einladungslink dalassen.</P>
       </div>
@@ -191,18 +168,6 @@ const SECTIONS: Section[] = [
           a="Es werden nur Name und Telefonnummer der Kunden gespeichert, mit Einwilligung, DSGVO-konform, Daten liegen auf Servern in der EU." />
         <Einwand e="Ich überlege es mir."
           a="Klar. Zwei Angebote: das Monatsabo für 20 € als unverbindlicher Einstieg, oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
-      </div>
-    ),
-  },
-  {
-    id: "designs", title: "Design-Beispiele zum Zeigen", icon: "🎨",
-    body: (
-      <div className="space-y-3">
-        <P>Zeig diese Beispiele im Gespräch: echte Designs von Loatycard-Shops und Vorlagen. Der Satz dazu: <b>„So sieht Ihre Karte aus, mit Ihrem Logo und Ihren Farben. Das individuelle Design ist bei jedem Shop dabei."</b></P>
-        <div className="grid grid-cols-2 gap-2">
-          {DESIGN_EXAMPLES.map(d => <MiniCard key={d.name} d={d} />)}
-        </div>
-        <P>Jeder Shop bekommt sein eigenes Design als Teil der einmaligen Einrichtung (99 €). Es gibt keine Shops „von der Stange" mehr.</P>
       </div>
     ),
   },
@@ -284,7 +249,7 @@ export default function UnterlagenPage() {
       </div>
 
       <p className="text-xs leading-relaxed text-[rgba(242,237,228,.45)]">
-        Alles, was du fürs Gespräch brauchst: Pitch, Einwände, Argumente, Design-Beispiele und der Ablauf bis zur Provision.
+        Alles, was du fürs Gespräch brauchst: Pitch, Einwände, Argumente, Live-Demo und der Ablauf bis zur Provision.
       </p>
 
       {SECTIONS.map(s => {
