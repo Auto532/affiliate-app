@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
-import { recurringPrice, rewardPrice, invoiceTotal, setupFee, applyDiscount, REWARD_PRICE_PER_MONTH } from "./pricing";
+import { recurringPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, applyDiscount, SETUP_FEE, REWARD_PRICE_PER_MONTH } from "./pricing";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
@@ -565,16 +565,15 @@ export const getEarningsSummary = query({
     // genau eine Commission mit paidAmount; ältere ohne paidAmount → baseAmount (Listenpreis).
     const revenueTotal = commissions.reduce((s, c) => s + ((c as any).paidAmount ?? c.baseAmount), 0);
 
-    // Einrichtungsgebühren-Anteil: steckt in jeder ERSTEN Zahlung (99 € bzw.
-    // 45 € mit Bonusprogramm, bei Rabattcode entsprechend reduziert).
+    // Einrichtungsgebühren-Anteil: steckt in jeder ERSTEN Zahlung
+    // (99 € normal, 45 € Aktionspreis mit Rabattcode).
     const contractById = new Map(contracts.map(c => [c._id, c]));
     let setupFeesTotal = 0;
     for (const c of commissions) {
       if (c.paymentNumber !== 1) continue;
       const contract = contractById.get(c.shopContractId);
       if (!contract) continue;
-      const list = setupFee(contract.rewardCount ?? 0);
-      setupFeesTotal += contract.firstYearDiscount ? applyDiscount(list, contract.firstYearDiscount) : list;
+      setupFeesTotal += setupFee(!!contract.firstYearDiscount);
     }
 
     // Provisionen nach Status
@@ -634,14 +633,12 @@ export const getEarningsDetail = query({
       const lead     = contract ? await ctx.db.get(contract.shopLeadId) : null;
       const paid     = (c as any).paidAmount ?? c.baseAmount;
 
-      // Einrichtungsanteil nur in Zahlung #1 (99 € bzw. 45 € mit Bonus, ggf. rabattiert)
+      // Einrichtungsanteil nur in Zahlung #1: 99 € normal, 45 € mit Rabattcode
       let setupFeePaid = 0;
       let setupFeeList = 0;
       if (c.paymentNumber === 1 && contract) {
-        setupFeeList = setupFee(contract.rewardCount ?? 0);
-        setupFeePaid = contract.firstYearDiscount
-          ? applyDiscount(setupFeeList, contract.firstYearDiscount)
-          : setupFeeList;
+        setupFeeList = SETUP_FEE;
+        setupFeePaid = setupFee(!!contract.firstYearDiscount);
       }
 
       return {
@@ -746,7 +743,7 @@ export const getContractForShop = query({
       recurringPrice:    recurringPrice(contract.planType, rewardCount),
       rewardUnitPrice:   rewardPrice(contract.planType),
       rewardPricePerMonth: REWARD_PRICE_PER_MONTH,
-      setupFee:          setupFee(rewardCount),
+      setupFee:          setupFee(!!contract.discountCode),
       discountCode:      contract.discountCode ?? null,
       firstYearDiscount: contract.firstYearDiscount ?? null,
     };
@@ -782,7 +779,7 @@ export const updateContractRewardCount = mutation({
       const normalPrice = invoiceTotal(contract.planType, rewardCount, true);
       await ctx.db.patch(args.contractId, {
         normalPrice,
-        discountedPrice: applyDiscount(normalPrice, contract.firstYearDiscount),
+        discountedPrice: discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
       });
     }
 

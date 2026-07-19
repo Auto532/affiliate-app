@@ -2,7 +2,7 @@
 import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
-import { planPrice, rewardPrice, invoiceTotal, setupFee as setupFeeFor, applyDiscount } from "./pricing";
+import { planPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, SETUP_FEE, applyDiscount } from "./pricing";
 import { lookupDiscount } from "./discounts";
 import { escapeHtml } from "./htmlEscape";
 
@@ -40,15 +40,17 @@ export const getByPaymentToken = query({
     const lead = await ctx.db.get(contract.shopLeadId);
 
     // Rechnungsbestandteile: Abo + Bonusprogramm (wiederkehrend) + Einrichtung
-    // inkl. Design (nur erste Rechnung). Rabatt (1. Jahr) gilt auf ALLES.
+    // inkl. Design (nur erste Rechnung). Mit Rabattcode: Prozent-Rabatt auf
+    // Abo + Bonus, Einrichtung fix zum Aktionspreis 45 € statt 99 €.
     const rewardCount  = contract.rewardCount ?? 0;
     const isFirst      = contract.paymentCount === 0;
+    const hasPromo     = isFirst && !!contract.firstYearDiscount;
     const aboPrice     = planPrice(contract.planType);
     const rewardsPrice = rewardPrice(contract.planType) * rewardCount;
-    const setupFee     = isFirst ? setupFeeFor(rewardCount) : 0;
-    const normalPrice  = aboPrice + rewardsPrice + setupFee;   // Listenbetrag dieser Rechnung
-    const payableAmount = (isFirst && contract.firstYearDiscount)
-      ? (contract.discountedPrice ?? applyDiscount(normalPrice, contract.firstYearDiscount))
+    const setupFeeDue  = isFirst ? setupFee(hasPromo) : 0;
+    const normalPrice  = aboPrice + rewardsPrice + (isFirst ? SETUP_FEE : 0); // Listenbetrag dieser Rechnung
+    const payableAmount = hasPromo
+      ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount!)
       : normalPrice;
 
     return {
@@ -64,7 +66,8 @@ export const getByPaymentToken = query({
       rewardCount,
       rewardUnitPrice: rewardPrice(contract.planType),
       rewardsPrice,
-      setupFee,
+      setupFee:       setupFeeDue,
+      setupFeeNormal: isFirst ? SETUP_FEE : 0,   // für die durchgestrichene 99 bei Aktionspreis
       // Rabatt-Status (nur Anzeige — verbindlich ist der Server)
       discountCode:      contract.discountCode ?? null,
       firstYearDiscount: contract.firstYearDiscount ?? null,
@@ -99,10 +102,9 @@ export const requestPayLater = mutation({
 
     const lead = await ctx.db.get(contract.shopLeadId);
     const rewardCount = contract.rewardCount ?? 0;
-    const listTotal   = invoiceTotal(contract.planType, rewardCount, true);
     const amount      = contract.firstYearDiscount
-      ? (contract.discountedPrice ?? applyDiscount(listTotal, contract.firstYearDiscount))
-      : listTotal;
+      ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
+      : invoiceTotal(contract.planType, rewardCount, true);
 
     await ctx.db.insert("auditLog", {
       entityType: "shopContract",
@@ -160,12 +162,13 @@ export const autoRecordPayment = internalMutation({
 
     // Tatsächlich eingenommener Betrag DIESER Zahlung:
     // Abo + Bonusprogramm, bei Zahlung #1 zusätzlich Einrichtung inkl. Design.
-    // Rabatt gilt nur für die erste Abrechnungsperiode (Zahlung #1); ab #2 Normalpreis.
+    // Rabattcode (nur Zahlung #1): Prozent-Rabatt auf Abo + Bonus, Einrichtung
+    // fix 45 € statt 99 €. Ab #2 Normalpreis.
     const rewardCount = contract.rewardCount ?? 0;
     const isFirst     = newCount === 1;
     const listTotal   = invoiceTotal(contract.planType, rewardCount, isFirst);
     const paidAmount  = (isFirst && contract.firstYearDiscount)
-      ? (contract.discountedPrice ?? applyDiscount(listTotal, contract.firstYearDiscount))
+      ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
       : listTotal;
 
     // Provisions-Basis ist NUR der Abo-Anteil (ohne Einrichtung & Bonusprogramm).
@@ -237,6 +240,31 @@ export const autoRecordPayment = internalMutation({
         action:     "commission_capped",
         actorType:  "system",
         note:       `Provision auf gezahlten Betrag €${paidAmount} gedeckelt (kein Minusgeschäft)`,
+      });
+    }
+
+    // Zahlungsbestätigung an den Inhaber: echte Abrechnung dieser Zahlung
+    // (bei Rabattcode mit durchgestrichenen Normalpreisen + Erstjahr-Hinweis).
+    const lead = await ctx.db.get(contract.shopLeadId);
+    if (lead?.ownerEmail) {
+      const d           = (isFirst && contract.firstYearDiscount) || 0;
+      const rewardsList = rewardPrice(contract.planType) * rewardCount;
+      await ctx.scheduler.runAfter(0, internal.emails.sendPaymentConfirmationEmail, {
+        ownerEmail:    lead.ownerEmail,
+        ownerName:     lead.ownerName || "Inhaber",
+        shopName:      lead.shopName || "Dein Shop",
+        planType:      contract.planType,
+        rewardCount,
+        paymentNumber: newCount,
+        aboList,
+        aboPaid:       Math.round(aboPaid * 100) / 100,
+        rewardsList,
+        rewardsPaid:   Math.round((d ? applyDiscount(rewardsList, d) : rewardsList) * 100) / 100,
+        setupList:     isFirst ? SETUP_FEE : 0,
+        setupPaid:     isFirst ? setupFee(!!d) : 0,
+        totalPaid:     Math.round(paidAmount * 100) / 100,
+        discountCode:      d ? (contract.discountCode ?? "Rabatt") : undefined,
+        firstYearDiscount: d || undefined,
       });
     }
 
@@ -415,9 +443,9 @@ export const applyDiscountCode = action({
     if (!discount)                       return { valid: false, reason: "Code ungültig" };
     if (!info.affiliateDiscountEligible) return { valid: false, reason: "Für diesen Vertrag nicht verfügbar" };
 
-    // Rabatt gilt auf die komplette erste Rechnung: Abo + Bonusprogramm + Einrichtung.
+    // Rabatt: Prozent auf Abo + Bonusprogramm, Einrichtung fix 45 € statt 99 €.
     const normalPrice     = invoiceTotal(info.planType, info.rewardCount, true);
-    const discountedPrice = applyDiscount(normalPrice, discount.firstYearDiscount);
+    const discountedPrice = discountedFirstInvoice(info.planType, info.rewardCount, discount.firstYearDiscount);
 
     await ctx.runMutation(internal.payments.storeDiscount, {
       shopContractId:    info.contractId,
@@ -484,19 +512,22 @@ export const createStripeCheckout = action({
         price_data: {
           currency: "eur",
           product_data: { name: "Einrichtung & individuelles Design (einmalig)" },
-          unit_amount: Math.round(setupFeeFor(info.rewardCount) * 100),
+          unit_amount: Math.round(SETUP_FEE * 100),
         },
         quantity: 1,
       });
 
-      // Rabatt (nur erste Rechnung) als Coupon duration:"once" — ab der
-      // Verlängerung gilt automatisch der Normalpreis.
+      // Rabatt (nur erste Rechnung) als FESTER Betrag mit duration:"once" — ab der
+      // Verlängerung gilt automatisch der Normalpreis. Fester Betrag statt Prozent,
+      // weil der Code-Rabatt nur auf Abo + Bonus gilt und die Einrichtung fix auf
+      // 45 € statt 99 € geht (info.payableAmount ist serverseitig korrekt berechnet).
       let discounts: { coupon: string }[] | undefined;
       if (info.firstYearDiscount && info.paymentCount === 0) {
         const coupon = await stripe.coupons.create({
-          percent_off: Math.round(info.firstYearDiscount * 100),
-          duration:    "once",
-          name:        info.discountCode ?? "Rabatt 1. Jahr",
+          amount_off: Math.round((info.normalPrice - info.payableAmount) * 100),
+          currency:   "eur",
+          duration:   "once",
+          name:       info.discountCode ?? "Rabatt 1. Jahr",
         });
         discounts = [{ coupon: coupon.id }];
       }

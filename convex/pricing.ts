@@ -5,15 +5,14 @@
 export const PLAN_PRICES = { annual: 240, monthly: 20 } as const;
 
 // Einmalige Einrichtungsgebühr inkl. individuellem Design — Pflicht für jeden
-// Shop, wird nur auf der ERSTEN Rechnung berechnet. Rabattcodes (1. Jahr) gelten
-// auch hierauf. Mit gebuchtem Bonusprogramm (rewardCount > 0) reduziert auf 45 €.
-export const SETUP_FEE            = 99;
-export const SETUP_FEE_WITH_BONUS = 45;
+// Shop, wird nur auf der ERSTEN Rechnung berechnet.
+// Angebot: Mit eingelöstem Rabattcode kostet die Einrichtung fix 45 € statt 99 €;
+// der Prozent-Rabatt des Codes gilt dann NUR auf Abo + Bonusprogramm.
+export const SETUP_FEE       = 99;
+export const SETUP_FEE_PROMO = 45;
 
-// Einrichtungsgebühr abhängig vom Bonusprogramm: Wer Belohnungen bucht, zahlt
-// einmalig nur 45 € statt 99 €.
-export function setupFee(rewardCount: number): number {
-  return rewardCount > 0 ? SETUP_FEE_WITH_BONUS : SETUP_FEE;
+export function setupFee(withPromo: boolean): number {
+  return withPromo ? SETUP_FEE_PROMO : SETUP_FEE;
 }
 
 // Bonusprogramm: Preis pro Belohnung pro MONAT. Beim Jahresabo stehen 12 Monate
@@ -34,10 +33,15 @@ export function recurringPrice(planType: "annual" | "monthly", rewardCount: numb
   return planPrice(planType) + rewardPrice(planType) * Math.max(0, rewardCount);
 }
 
-// Listenbetrag einer Rechnung: Erstrechnung enthält zusätzlich die Einrichtungsgebühr
-// (45 € statt 99 € wenn Bonusprogramm gebucht).
+// Listenbetrag einer Rechnung: Erstrechnung enthält zusätzlich die Einrichtungsgebühr.
 export function invoiceTotal(planType: "annual" | "monthly", rewardCount: number, isFirst: boolean): number {
-  return recurringPrice(planType, rewardCount) + (isFirst ? setupFee(rewardCount) : 0);
+  return recurringPrice(planType, rewardCount) + (isFirst ? SETUP_FEE : 0);
+}
+
+// Zahlbetrag der ERSTEN Rechnung mit Rabattcode: Prozent-Rabatt auf Abo + Bonus,
+// Einrichtung fix zum Aktionspreis 45 €.
+export function discountedFirstInvoice(planType: "annual" | "monthly", rewardCount: number, discount: number): number {
+  return Math.round((applyDiscount(recurringPrice(planType, rewardCount), discount) + SETUP_FEE_PROMO) * 100) / 100;
 }
 
 export function applyDiscount(amount: number, discount: number | undefined | null): number {

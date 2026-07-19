@@ -144,8 +144,8 @@ const SECTIONS: Section[] = [
           {[
             { name: "Jahresabo",               preis: "240 € / Jahr",   detail: "Rund 66 Cent pro Tag. Das Hauptprodukt: digitale Stempelkarte, QR-Scanner, Kunden-Statistiken." },
             { name: "Monatsabo",               preis: "20 € / Monat",   detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
-            { name: "Einrichtung & Design",    preis: "99 € einmalig · 45 € mit Bonusprogramm",  detail: "Bei jedem Shop dabei (Pflichtbestandteil): komplette Einrichtung plus individuelles Design: eigenes Logo, eigene Farben, eigener Look. Bucht der Shop das Bonusprogramm, kostet die Einrichtung einmalig nur 45 €. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
-            { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat, beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt. Starkes Verkaufsargument: Mit Bonusprogramm sinkt die Einrichtung von 99 € auf 45 €." },
+            { name: "Einrichtung & Design",    preis: "99 € einmalig · 45 € mit Rabattcode",  detail: "Bei jedem Shop dabei (Pflichtbestandteil): komplette Einrichtung plus individuelles Design: eigenes Logo, eigene Farben, eigener Look. Wird ein Rabattcode eingelöst (nur wenn du dafür freigeschaltet bist), kostet die Einrichtung einmalig nur 45 €. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
+            { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat, beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt." },
           ].map(p => (
             <div key={p.name} className="rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
               <div className="flex items-baseline justify-between gap-2">

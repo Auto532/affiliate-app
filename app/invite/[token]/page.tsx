@@ -126,9 +126,7 @@ export default function InvitePage() {
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
             <div>
               <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Belohnung{rewardCount === 1 ? "" : "en"}</p>
-              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">
-                5 € / Monat pro Belohnung{rewardCount > 0 ? " · Einrichtung nur 45 € statt 99 €" : " · senkt die Einrichtung auf 45 €"}
-              </p>
+              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">5 € / Monat pro Belohnung</p>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}
