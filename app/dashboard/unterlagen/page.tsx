@@ -134,8 +134,8 @@ const SECTIONS: Section[] = [
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-2">
           {[
-            { name: "Jahresabo",               preis: "360 € / Jahr",   detail: "Nicht mal 1 € pro Tag. Das Hauptprodukt — digitale Stempelkarte, QR-Scanner, Kunden-Statistiken." },
-            { name: "Monatsabo",               preis: "30 € / Monat",   detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
+            { name: "Jahresabo",               preis: "240 € / Jahr",   detail: "Rund 66 Cent pro Tag. Das Hauptprodukt — digitale Stempelkarte, QR-Scanner, Kunden-Statistiken." },
+            { name: "Monatsabo",               preis: "20 € / Monat",   detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
             { name: "Einrichtung & Design",    preis: "99 € einmalig",  detail: "Bei jedem Shop dabei (Pflichtbestandteil): komplette Einrichtung plus individuelles Design — eigenes Logo, eigene Farben, eigener Look. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
             { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat — beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt." },
           ].map(p => (
@@ -180,7 +180,7 @@ const SECTIONS: Section[] = [
     body: (
       <div className="space-y-2">
         <Einwand e="Das ist mir zu teuer."
-          a="Das Jahresabo kostet rund 1 Euro pro Tag. Wenn dadurch nur ein einziger Kunde pro Woche einmal öfter kommt, hat es sich mehrfach bezahlt. Rechnen Sie es an Ihrem Durchschnittsbon durch." />
+          a="Das Jahresabo kostet keine 70 Cent pro Tag. Wenn dadurch nur ein einziger Kunde pro Woche einmal öfter kommt, hat es sich mehrfach bezahlt. Rechnen Sie es an Ihrem Durchschnittsbon durch." />
         <Einwand e="Meine Papierkarten funktionieren doch."
           a="Wie viele kommen tatsächlich voll zurück? Die meisten landen in der Waschmaschine oder im Müll. Und: Papier sagt Ihnen nicht, wer Ihre Stammkunden sind — die digitale Karte schon." />
         <Einwand e="Meine Kunden sind nicht so digital."
@@ -190,7 +190,7 @@ const SECTIONS: Section[] = [
         <Einwand e="Was ist mit Datenschutz?"
           a="Es werden nur Name und Telefonnummer der Kunden gespeichert, mit Einwilligung, DSGVO-konform, Daten liegen auf Servern in der EU." />
         <Einwand e="Ich überlege es mir."
-          a="Klar. Zwei Angebote: das Monatsabo für 30 € als unverbindlicher Einstieg — oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
+          a="Klar. Zwei Angebote: das Monatsabo für 20 € als unverbindlicher Einstieg — oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
       </div>
     ),
   },

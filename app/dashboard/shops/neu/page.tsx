@@ -82,8 +82,8 @@ export default function NewShopPage() {
           <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Vertragsmodell *</label>
           <div className="grid grid-cols-2 gap-2">
             {([
-              { id: "annual",  label: "Jahresabo",  price: "€360 / Jahr",  comm: "20% = €72" },
-              { id: "monthly", label: "Monatsabo",  price: "€30 / Monat",  comm: "20% = €6"  },
+              { id: "annual",  label: "Jahresabo",  price: "€240 / Jahr",  comm: "20% = €48" },
+              { id: "monthly", label: "Monatsabo",  price: "€20 / Monat",  comm: "20% = €4"  },
             ] as const).map(p => (
               <button key={p.id} type="button" onClick={() => setPlanType(p.id)}
                 className="rounded-xl p-3 text-left transition-colors"

@@ -2,7 +2,7 @@
 // Preise nur HIER ändern — alle Rechen-Stellen (Provision, Zahlbetrag,
 // Umsatz-Summary, Checkout) greifen darauf zu.
 
-export const PLAN_PRICES = { annual: 360, monthly: 30 } as const;
+export const PLAN_PRICES = { annual: 240, monthly: 20 } as const;
 
 // Einmalige Einrichtungsgebühr inkl. individuellem Design — Pflicht für jeden
 // Shop, wird nur auf der ERSTEN Rechnung berechnet. Rabattcodes (1. Jahr) gelten
