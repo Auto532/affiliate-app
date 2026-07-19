@@ -565,6 +565,18 @@ export const getEarningsSummary = query({
     // genau eine Commission mit paidAmount; ältere ohne paidAmount → baseAmount (Listenpreis).
     const revenueTotal = commissions.reduce((s, c) => s + ((c as any).paidAmount ?? c.baseAmount), 0);
 
+    // Einrichtungsgebühren-Anteil: steckt in jeder ERSTEN Zahlung (99 € bzw.
+    // 45 € mit Bonusprogramm, bei Rabattcode entsprechend reduziert).
+    const contractById = new Map(contracts.map(c => [c._id, c]));
+    let setupFeesTotal = 0;
+    for (const c of commissions) {
+      if (c.paymentNumber !== 1) continue;
+      const contract = contractById.get(c.shopContractId);
+      if (!contract) continue;
+      const list = setupFee(contract.rewardCount ?? 0);
+      setupFeesTotal += contract.firstYearDiscount ? applyDiscount(list, contract.firstYearDiscount) : list;
+    }
+
     // Provisionen nach Status
     const commPending   = commissions.filter(c => c.status === "pending")  .reduce((s, c) => s + c.amount, 0);
     const commConfirmed = commissions.filter(c => c.status === "confirmed").reduce((s, c) => s + c.amount, 0);
@@ -586,6 +598,8 @@ export const getEarningsSummary = query({
 
     return {
       revenueTotal:   Math.round(revenueTotal   * 100) / 100,
+      setupFeesTotal: Math.round(setupFeesTotal  * 100) / 100,
+      aboRevenue:     Math.round((revenueTotal - setupFeesTotal) * 100) / 100,
       commTotal:      Math.round(commTotal       * 100) / 100,
       commPending:    Math.round(commPending     * 100) / 100,
       commConfirmed:  Math.round(commConfirmed   * 100) / 100,
@@ -619,12 +633,25 @@ export const getEarningsDetail = query({
       const contract = await ctx.db.get(c.shopContractId);
       const lead     = contract ? await ctx.db.get(contract.shopLeadId) : null;
       const paid     = (c as any).paidAmount ?? c.baseAmount;
+
+      // Einrichtungsanteil nur in Zahlung #1 (99 € bzw. 45 € mit Bonus, ggf. rabattiert)
+      let setupFeePaid = 0;
+      let setupFeeList = 0;
+      if (c.paymentNumber === 1 && contract) {
+        setupFeeList = setupFee(contract.rewardCount ?? 0);
+        setupFeePaid = contract.firstYearDiscount
+          ? applyDiscount(setupFeeList, contract.firstYearDiscount)
+          : setupFeeList;
+      }
+
       return {
         date:             c.triggeredAt,
         shopName:         lead?.shopName ?? "—",
         planType:         c.planType,
         paymentNumber:    c.paymentNumber,
         paidAmount:       Math.round(paid * 100) / 100,
+        setupFeePaid:     Math.round(setupFeePaid * 100) / 100,
+        setupFeeList,
         commission:       c.amount,
         commissionStatus: c.status,
         direct:           contract?.isDirect === true,
