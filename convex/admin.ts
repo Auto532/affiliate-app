@@ -771,6 +771,59 @@ export const updateContractRewardCount = mutation({
   },
 });
 
+// ── "Später zahlen"-Liste (Admin-Direkt-Shops, Zahlung vorgemerkt) ────────────
+
+export const getPayLaterList = query({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const contracts = (await ctx.db.query("shopContracts").collect())
+      .filter(c => c.payLaterAt && c.paymentCount === 0 && c.status === "active");
+
+    const rows = await Promise.all(contracts.map(async c => {
+      const lead        = await ctx.db.get(c.shopLeadId);
+      const rewardCount = c.rewardCount ?? 0;
+      const listTotal   = invoiceTotal(c.planType, rewardCount, true);
+      const amount      = c.firstYearDiscount
+        ? (c.discountedPrice ?? applyDiscount(listTotal, c.firstYearDiscount))
+        : listTotal;
+      return {
+        contractId:   c._id,
+        shopName:     lead?.shopName ?? "—",
+        ownerName:    lead?.ownerName ?? "—",
+        ownerEmail:   lead?.ownerEmail ?? "",
+        ownerPhone:   lead?.ownerPhone ?? "",
+        planType:     c.planType,
+        rewardCount,
+        amount,
+        payLaterAt:   c.payLaterAt!,
+        paymentToken: c.paymentToken ?? "",
+      };
+    }));
+
+    return rows.sort((a, b) => b.payLaterAt - a.payLaterAt);
+  },
+});
+
+// Vormerkung entfernen (z.B. geklärt oder hinfällig). Nach Zahlungseingang
+// verschwindet der Eintrag automatisch (paymentCount > 0).
+export const clearPayLater = mutation({
+  args: { adminSecret: v.string(), contractId: v.id("shopContracts") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const contract = await ctx.db.get(args.contractId);
+    if (!contract) throw new ConvexError("Vertrag nicht gefunden");
+    await ctx.db.patch(args.contractId, { payLaterAt: undefined });
+    await ctx.db.insert("auditLog", {
+      entityType: "shopContract",
+      entityId:   args.contractId,
+      action:     "pay_later_cleared",
+      actorType:  "admin",
+    });
+  },
+});
+
 // ── Provisionen für Vertrag ───────────────────────────────────────────────────
 
 export const getCommissionsForContract = query({

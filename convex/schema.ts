@@ -142,6 +142,11 @@ export default defineSchema({
     normalPrice:       v.optional(v.number()),  // Listenpreis
     discountedPrice:   v.optional(v.number()),  // tatsächlich zu zahlen (Jahr 1)
 
+    // Shop-Inhaber hat auf der Zahlungsseite "Später zahlen" gewählt.
+    // Wird beim Zahlungseingang irrelevant (paymentCount > 0 filtert die
+    // Admin-Liste), kann vom Admin auch manuell gelöscht werden.
+    payLaterAt:    v.optional(v.number()),
+
     // Stripe Subscription (wird gesetzt sobald STRIPE_SUBSCRIPTION_MODE aktiv)
     stripeSubscriptionId: v.optional(v.string()),
     stripeCustomerId:     v.optional(v.string()),

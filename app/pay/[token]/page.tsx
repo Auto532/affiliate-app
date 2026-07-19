@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery, useAction } from "convex/react";
+import { useQuery, useAction, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -14,7 +14,9 @@ export default function PayPage() {
   const info                  = useQuery(api.payments.getByPaymentToken, { token });
   const createStripe          = useAction(api.payments.createStripeCheckout);
   const applyDiscount         = useAction(api.payments.applyDiscountCode);
+  const requestPayLater       = useMutation(api.payments.requestPayLater);
 
+  const [payLaterLoading, setPayLaterLoading] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
   const [error, setError]                 = useState("");
   const [code, setCode]                   = useState("");
@@ -198,6 +200,29 @@ export default function PayPage() {
           )}
         </button>
       </div>
+
+      {/* Später zahlen (nur Direkt-Shops): merkt die Zahlung vor, Link bleibt gültig */}
+      {info.canPayLater && !info.payLaterAt && (
+        <button
+          onClick={async () => {
+            setPayLaterLoading(true); setError("");
+            try { await requestPayLater({ token }); }
+            catch (e: any) { setError(errMsg(e, "Fehler")); }
+            finally { setPayLaterLoading(false); }
+          }}
+          disabled={payLaterLoading}
+          className="w-full py-3 rounded-2xl text-sm font-semibold text-[rgba(242,237,228,.7)] disabled:opacity-50"
+          style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.12)" }}>
+          {payLaterLoading ? "Wird vorgemerkt..." : "Später zahlen"}
+        </button>
+      )}
+      {info.payLaterAt ? (
+        <div className="rounded-xl px-4 py-3 text-sm"
+          style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.3)", color: "#e8c96a" }}>
+          Alles klar, die Zahlung ist zum späteren Abschluss vorgemerkt. Dieser Link
+          bleibt gültig, du kannst jederzeit hierher zurückkommen und bezahlen.
+        </div>
+      ) : null}
 
       {error && (
         <p className="text-center text-red-400 text-sm">{error}</p>

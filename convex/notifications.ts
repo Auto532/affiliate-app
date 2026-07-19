@@ -19,6 +19,25 @@ async function sendTelegram(text: string): Promise<void> {
   }).catch(() => {});
 }
 
+// Shop-Inhaber hat auf der Zahlungsseite "Später zahlen" gewählt.
+export const notifyPayLater = internalAction({
+  args: {
+    shopName:  v.string(),
+    ownerName: v.string(),
+    amount:    v.number(),
+    planType:  v.union(v.literal("annual"), v.literal("monthly")),
+  },
+  handler: async (_ctx, args): Promise<void> => {
+    await sendTelegram(
+      `⏳ <b>Später zahlen gewählt</b>\n\n` +
+      `<b>Shop:</b> ${escapeHtml(args.shopName)}\n` +
+      `<b>Inhaber:</b> ${escapeHtml(args.ownerName)}\n` +
+      `<b>Betrag:</b> €${args.amount} (${args.planType === "annual" ? "Jahresabo" : "Monatsabo"})\n\n` +
+      `Der Bezahllink bleibt gültig. Liste: Admin → Analytics → Finanzen.`
+    );
+  },
+});
+
 export const notifyNewShopLead = internalAction({
   args: {
     shopName:      v.string(),

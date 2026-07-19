@@ -1,4 +1,4 @@
-﻿import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+﻿import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
@@ -70,7 +70,56 @@ export const getByPaymentToken = query({
       firstYearDiscount: contract.firstYearDiscount ?? null,
       normalPrice,
       discountedPrice:   contract.discountedPrice ?? null,
+      payLaterAt:        contract.payLaterAt ?? null,
+      // "Später zahlen" gibt es nur bei Admin-Direkt-Shops (Partner-Shops zahlen sofort)
+      canPayLater:       contract.isDirect === true && contract.paymentCount === 0,
     };
+  },
+});
+
+// ── "Später zahlen": Shop-Inhaber merkt die Zahlung zum späteren Abschluss vor ─
+// Der Link bleibt gültig; der Vertrag landet in der Admin-Liste (Analytics →
+// Finanzen) und der Admin bekommt eine Telegram-Nachricht.
+
+export const requestPayLater = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const contract = await ctx.db
+      .query("shopContracts")
+      .withIndex("by_paymentToken", q => q.eq("paymentToken", args.token))
+      .unique();
+    if (!contract)                    throw new ConvexError("Ungültiger Zahlungslink");
+    if (contract.status !== "active") throw new ConvexError("Vertrag ist nicht aktiv");
+    if (contract.paymentCount > 0)    throw new ConvexError("Bereits bezahlt");
+    // Nur bei Admin-Direkt-Shops: Partner-Shops zahlen direkt beim Abschluss.
+    if (!contract.isDirect)           throw new ConvexError("Nicht verfügbar");
+    if (contract.payLaterAt) return { alreadySet: true };
+
+    await ctx.db.patch(contract._id, { payLaterAt: Date.now() });
+
+    const lead = await ctx.db.get(contract.shopLeadId);
+    const rewardCount = contract.rewardCount ?? 0;
+    const listTotal   = invoiceTotal(contract.planType, rewardCount, true);
+    const amount      = contract.firstYearDiscount
+      ? (contract.discountedPrice ?? applyDiscount(listTotal, contract.firstYearDiscount))
+      : listTotal;
+
+    await ctx.db.insert("auditLog", {
+      entityType: "shopContract",
+      entityId:   contract._id,
+      action:     "pay_later_requested",
+      actorType:  "system",
+      note:       `Vom Shop-Inhaber gewählt · ${lead?.shopName ?? "—"} · €${amount}`,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyPayLater, {
+      shopName:  lead?.shopName ?? "—",
+      ownerName: lead?.ownerName ?? "—",
+      amount,
+      planType:  contract.planType,
+    });
+
+    return { alreadySet: false };
   },
 });
 
