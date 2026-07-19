@@ -23,6 +23,7 @@ import type * as rateLimit from "../rateLimit.js";
 import type * as shopLeads from "../shopLeads.js";
 import type * as support from "../support.js";
 import type * as testPayments from "../testPayments.js";
+import type * as validation from "../validation.js";
 
 import type {
   ApiFromModules,
@@ -46,6 +47,7 @@ declare const fullApi: ApiFromModules<{
   shopLeads: typeof shopLeads;
   support: typeof support;
   testPayments: typeof testPayments;
+  validation: typeof validation;
 }>;
 
 /**

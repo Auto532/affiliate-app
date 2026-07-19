@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
+import { isValidEmail } from "./validation";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
@@ -182,6 +183,7 @@ export const createDirectShopContract = mutation({
     requireAdmin(args.adminSecret);
 
     if (args.ownerEmail) {
+      if (!isValidEmail(args.ownerEmail)) throw new Error("Inhaber E-Mail: bitte eine gültige E-Mail-Adresse angeben");
       const dupe = await ctx.db
         .query("shopLeads")
         .withIndex("by_ownerEmail", q => q.eq("ownerEmail", args.ownerEmail!))

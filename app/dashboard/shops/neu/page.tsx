@@ -32,6 +32,9 @@ export default function NewShopPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.ownerEmail.trim())) {
+      setError("Bitte eine gültige Inhaber E-Mail angeben"); return;
+    }
     setError(""); setLoading(true);
     try {
       const leadId = await submitLead({

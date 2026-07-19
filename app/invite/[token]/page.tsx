@@ -25,6 +25,9 @@ export default function InvitePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.ownerEmail.trim())) {
+      setError("Bitte eine gültige E-Mail-Adresse angeben"); return;
+    }
     setError(""); setLoading(true);
     try {
       await acceptInvite({

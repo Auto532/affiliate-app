@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { requireValidEmail, requireFilled } from "./validation";
 
 async function requireAffiliate(ctx: any, token: string) {
   const session = await ctx.db
@@ -30,9 +31,13 @@ export const submitLead = mutation({
   handler: async (ctx, args) => {
     const affiliate = await requireAffiliate(ctx, args.token);
 
+    const shopName   = requireFilled(args.shopName, "Shop-Name");
+    const ownerName  = requireFilled(args.ownerName, "Inhaber-Name");
+    const ownerEmail = requireValidEmail(args.ownerEmail, "Inhaber E-Mail");
+
     const existing = await ctx.db
       .query("shopLeads")
-      .withIndex("by_ownerEmail", q => q.eq("ownerEmail", args.ownerEmail))
+      .withIndex("by_ownerEmail", q => q.eq("ownerEmail", ownerEmail))
       .unique();
     if (existing) throw new Error("Ein Shop mit dieser E-Mail wurde bereits eingereicht");
 
@@ -41,9 +46,9 @@ export const submitLead = mutation({
 
     const leadId = await ctx.db.insert("shopLeads", {
       affiliateId:      affiliate._id,
-      shopName:         args.shopName,
-      ownerName:        args.ownerName,
-      ownerEmail:       args.ownerEmail,
+      shopName,
+      ownerName,
+      ownerEmail,
       ownerPhone:       args.ownerPhone,
       businessType:     args.businessType,
       city:             args.city,
@@ -73,17 +78,17 @@ export const submitLead = mutation({
     });
 
     await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
-      ownerEmail:  args.ownerEmail,
-      ownerName:   args.ownerName,
-      shopName:    args.shopName,
+      ownerEmail,
+      ownerName,
+      shopName,
       planType:    args.planType,
       rewardCount,
     });
 
     await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
-      shopName:      args.shopName,
-      ownerName:     args.ownerName,
-      ownerEmail:    args.ownerEmail,
+      shopName,
+      ownerName,
+      ownerEmail,
       ownerPhone:    args.ownerPhone,
       city:          args.city,
       businessType:  args.businessType,
@@ -148,9 +153,13 @@ export const acceptInvite = mutation({
     if (lead.inviteExpiresAt && lead.inviteExpiresAt < Date.now())
                                                   throw new Error("Der Einladungslink ist abgelaufen");
 
+    const shopName   = requireFilled(args.shopName, "Name des Geschäfts");
+    const ownerName  = requireFilled(args.ownerName, "Name");
+    const ownerEmail = requireValidEmail(args.ownerEmail);
+
     const existing = await ctx.db
       .query("shopLeads")
-      .withIndex("by_ownerEmail", q => q.eq("ownerEmail", args.ownerEmail))
+      .withIndex("by_ownerEmail", q => q.eq("ownerEmail", ownerEmail))
       .unique();
     if (existing && existing._id !== lead._id) throw new Error("Diese E-Mail ist bereits registriert");
 
@@ -159,9 +168,9 @@ export const acceptInvite = mutation({
     const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
 
     await ctx.db.patch(lead._id, {
-      shopName:         args.shopName,
-      ownerName:        args.ownerName,
-      ownerEmail:       args.ownerEmail,
+      shopName,
+      ownerName,
+      ownerEmail,
       ownerPhone:       args.ownerPhone,
       businessType:     args.businessType,
       city:             args.city,
@@ -191,9 +200,9 @@ export const acceptInvite = mutation({
 
     const inviteAffiliate = await ctx.db.get(lead.affiliateId);
     await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
-      shopName:      args.shopName,
-      ownerName:     args.ownerName,
-      ownerEmail:    args.ownerEmail,
+      shopName,
+      ownerName,
+      ownerEmail,
       ownerPhone:    args.ownerPhone,
       city:          args.city,
       businessType:  args.businessType,

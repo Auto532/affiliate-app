@@ -40,10 +40,49 @@ export default function PartnerInvitePage() {
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
 
+  const isValidEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim());
+
+  // Pflichtfelder pro Sektion: ohne vollständige Angaben geht es nicht weiter.
+  // Der Server prüft dieselben Regeln nochmal verbindlich.
+  const sectionError = (s: Section): string | null => {
+    if (s === "zugangsdaten") {
+      if (!form.name.trim())                      return "Bitte deinen vollständigen Namen angeben";
+      if (!isValidEmail(form.email))              return "Bitte eine gültige E-Mail-Adresse angeben";
+      if (form.password.length < 8)               return "Passwort muss mindestens 8 Zeichen haben";
+      if (form.password !== form.passwordConfirm) return "Passwörter stimmen nicht überein";
+      if (!form.phone.trim())                     return "Bitte eine Telefonnummer angeben";
+    }
+    if (s === "rechtliches") {
+      if (businessType === "business" && !form.company.trim()) return "Bitte den Firmennamen angeben";
+      if (!form.dateOfBirth.trim())                            return "Bitte dein Geburtsdatum angeben";
+      if (businessType === "business" && !form.taxId.trim())   return "Bitte die Steuernummer angeben";
+    }
+    if (s === "adresse") {
+      if (!form.address.trim()) return "Bitte Straße und Hausnummer angeben";
+      if (!form.zip.trim())     return "Bitte die PLZ angeben";
+      if (!form.city.trim())    return "Bitte die Stadt angeben";
+      if (!form.country.trim()) return "Bitte das Land angeben";
+    }
+    if (s === "bank") {
+      if (!form.bankIban.trim()) return "Bitte deine IBAN angeben";
+      if (!form.bankName.trim()) return "Bitte den Banknamen angeben";
+    }
+    return null;
+  };
+
+  const goNext = (from: Section, to: Section) => {
+    const err = sectionError(from);
+    if (err) { setError(err); return; }
+    setError("");
+    setSection(to);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.password !== form.passwordConfirm) { setError("Passwörter stimmen nicht überein"); return; }
-    if (!form.name || !form.email || !form.password) { setError("Bitte Name, E-Mail und Passwort ausfüllen"); return; }
+    for (const s of SECTIONS) {
+      const err = sectionError(s.id);
+      if (err) { setError(err); setSection(s.id); return; }
+    }
     setError(""); setLoading(true);
     try {
       const passwordHash = await sha256(form.password);
@@ -108,8 +147,15 @@ export default function PartnerInvitePage() {
 
       {/* Section Tabs */}
       <div className="grid grid-cols-4 gap-1">
-        {SECTIONS.map(s => (
-          <button key={s.id} type="button" onClick={() => setSection(s.id)}
+        {SECTIONS.map((s, idx) => (
+          <button key={s.id} type="button" onClick={() => {
+            // Vorwärts springen nur, wenn alle Sektionen davor vollständig sind
+            for (let i = 0; i < idx; i++) {
+              const err = sectionError(SECTIONS[i].id);
+              if (err) { setError(err); setSection(SECTIONS[i].id); return; }
+            }
+            setError(""); setSection(s.id);
+          }}
             className="py-2 rounded-xl text-[10px] font-semibold transition-colors"
             style={section === s.id
               ? { background: "rgba(201,162,39,.15)", border: "1px solid rgba(201,162,39,.3)", color: "#c9a227" }
@@ -129,7 +175,7 @@ export default function PartnerInvitePage() {
               { k: "email",           label: "E-Mail (Login) *",        type: "email"    },
               { k: "password",        label: "Passwort *",              type: "password" },
               { k: "passwordConfirm", label: "Passwort bestätigen *",   type: "password" },
-              { k: "phone",           label: "Telefon",                 type: "tel"      },
+              { k: "phone",           label: "Telefon *",               type: "tel"      },
             ].map(({ k, label, type }) => (
               <div key={k}>
                 <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">{label}</label>
@@ -137,7 +183,7 @@ export default function PartnerInvitePage() {
                   className="w-full px-4 py-3 bg-[#17150f] border border-[rgba(255,255,255,.08)] rounded-xl text-[#f2ede4] placeholder-[rgba(242,237,228,.3)] focus:outline-none focus:border-[rgba(201,162,39,.4)] text-sm" />
               </div>
             ))}
-            <button type="button" onClick={() => setSection("rechtliches")}
+            <button type="button" onClick={() => goNext("zugangsdaten", "rechtliches")}
               className="w-full py-3 rounded-xl text-sm font-semibold text-[#0d0c0a]"
               style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>
               Weiter →
@@ -179,10 +225,10 @@ export default function PartnerInvitePage() {
               )}
             </div>
             {[
-              { k: "company",     label: "Firmenname",   placeholder: "",              onlyBusiness: true  },
-              { k: "dateOfBirth", label: "Geburtsdatum", placeholder: "15.03.1990",   onlyBusiness: false },
-              { k: "taxId",       label: "Steuernummer", placeholder: "123/456/78901", onlyBusiness: true  },
-              { k: "vatId",       label: "USt-IdNr.",    placeholder: "DE123456789",  onlyBusiness: true  },
+              { k: "company",     label: "Firmenname *",   placeholder: "",              onlyBusiness: true  },
+              { k: "dateOfBirth", label: "Geburtsdatum *", placeholder: "15.03.1990",   onlyBusiness: false },
+              { k: "taxId",       label: "Steuernummer *", placeholder: "123/456/78901", onlyBusiness: true  },
+              { k: "vatId",       label: "USt-IdNr.",      placeholder: "DE123456789",  onlyBusiness: true  },
             ].filter(f => !f.onlyBusiness || businessType === "business").map(({ k, label, placeholder }) => (
               <div key={k}>
                 <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">{label}</label>
@@ -194,7 +240,7 @@ export default function PartnerInvitePage() {
               <button type="button" onClick={() => setSection("zugangsdaten")}
                 className="flex-1 py-3 rounded-xl text-sm font-semibold text-[rgba(242,237,228,.5)]"
                 style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>← Zurück</button>
-              <button type="button" onClick={() => setSection("adresse")}
+              <button type="button" onClick={() => goNext("rechtliches", "adresse")}
                 className="flex-[2] py-3 rounded-xl text-sm font-semibold text-[#0d0c0a]"
                 style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>Weiter →</button>
             </div>
@@ -208,7 +254,7 @@ export default function PartnerInvitePage() {
               { k: "address", label: "Straße + Hausnummer *", placeholder: "Musterstraße 12" },
               { k: "zip",     label: "PLZ *",                 placeholder: "80331"            },
               { k: "city",    label: "Stadt *",               placeholder: "München"           },
-              { k: "country", label: "Land",                  placeholder: "Deutschland"       },
+              { k: "country", label: "Land *",                placeholder: "Deutschland"       },
             ].map(({ k, label, placeholder }) => (
               <div key={k}>
                 <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">{label}</label>
@@ -220,7 +266,7 @@ export default function PartnerInvitePage() {
               <button type="button" onClick={() => setSection("rechtliches")}
                 className="flex-1 py-3 rounded-xl text-sm font-semibold text-[rgba(242,237,228,.5)]"
                 style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>← Zurück</button>
-              <button type="button" onClick={() => setSection("bank")}
+              <button type="button" onClick={() => goNext("adresse", "bank")}
                 className="flex-[2] py-3 rounded-xl text-sm font-semibold text-[#0d0c0a]"
                 style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>Weiter →</button>
             </div>
@@ -235,9 +281,9 @@ export default function PartnerInvitePage() {
               Deine Bankdaten werden ausschließlich für Provisionszahlungen verwendet.
             </div>
             {[
-              { k: "bankIban", label: "IBAN *",        placeholder: "DE89 3704 0044 ..."  },
-              { k: "bankBic",  label: "BIC / SWIFT *", placeholder: "COBADEFFXXX"         },
-              { k: "bankName", label: "Bankname",       placeholder: "Commerzbank"         },
+              { k: "bankIban", label: "IBAN *",       placeholder: "DE89 3704 0044 ..."  },
+              { k: "bankBic",  label: "BIC / SWIFT",  placeholder: "COBADEFFXXX"         },
+              { k: "bankName", label: "Bankname *",   placeholder: "Commerzbank"         },
             ].map(({ k, label, placeholder }) => (
               <div key={k}>
                 <label className="block text-xs text-[rgba(242,237,228,.4)] mb-1.5">{label}</label>
@@ -271,6 +317,11 @@ export default function PartnerInvitePage() {
         )}
 
       </form>
+
+      {/* Fehler außerhalb der Bank-Sektion sichtbar machen */}
+      {error && section !== "bank" && (
+        <p className="text-center text-red-400 text-sm">{error}</p>
+      )}
     </div>
   );
 }

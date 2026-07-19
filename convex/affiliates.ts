@@ -4,6 +4,7 @@ import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { derivePasswordHash, newSalt, timingSafeEqual } from "./passwords";
 import { assertNotLocked, recordFailure, clearFailures } from "./rateLimit";
+import { requireValidEmail, requireFilled } from "./validation";
 
 // Verifiziert das (client-seitig SHA-256-gehashte) Passwort gegen den gespeicherten
 // gesalzenen Hash. Legacy-Accounts (ohne Salt) werden bei korrektem Passwort
@@ -50,9 +51,25 @@ export const register = mutation({
     bankName:     v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    // Pflichtangaben serverseitig erzwingen: der Client prüft dieselben Regeln,
+    // verbindlich ist der Server (Provisionsabrechnung braucht vollständige Daten).
+    const email       = requireValidEmail(args.email);
+    const name        = requireFilled(args.name, "Name");
+    const phone       = requireFilled(args.phone, "Telefon");
+    const dateOfBirth = requireFilled(args.dateOfBirth, "Geburtsdatum");
+    const address     = requireFilled(args.address, "Adresse");
+    const zip         = requireFilled(args.zip, "PLZ");
+    const city        = requireFilled(args.city, "Stadt");
+    const bankIban    = requireFilled(args.bankIban, "IBAN");
+    const bankName    = requireFilled(args.bankName, "Bankname");
+    if (args.businessType === "business") {
+      requireFilled(args.company, "Firmenname");
+      requireFilled(args.taxId, "Steuernummer");
+    }
+
     const existing = await ctx.db
       .query("affiliates")
-      .withIndex("by_email", q => q.eq("email", args.email))
+      .withIndex("by_email", q => q.eq("email", email))
       .unique();
     if (existing) throw new Error("E-Mail bereits registriert");
 
@@ -71,25 +88,25 @@ export const register = mutation({
 
     const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {
-      name:         args.name,
-      email:        args.email,
+      name,
+      email,
       passwordHash: await derivePasswordHash(args.passwordHash, salt),
       passwordSalt: salt,
       referralCode: code,
       status:       "pending",
       businessType: args.businessType,
-      phone:        args.phone,
+      phone,
       company:      args.company,
-      dateOfBirth:  args.dateOfBirth,
+      dateOfBirth,
       taxId:        args.taxId,
       vatId:        args.vatId,
-      address:      args.address,
-      zip:          args.zip,
-      city:         args.city,
+      address,
+      zip,
+      city,
       country:      args.country ?? "Deutschland",
-      bankIban:     args.bankIban,
+      bankIban,
       bankBic:      args.bankBic,
-      bankName:     args.bankName,
+      bankName,
     });
 
     await ctx.db.insert("auditLog", {
@@ -112,10 +129,19 @@ export const login = mutation({
     const throttleKey = `login:${args.email.trim().toLowerCase()}`;
     const throttle = await assertNotLocked(ctx, throttleKey);
 
-    const affiliate = await ctx.db
+    // Registrierung speichert E-Mails kleingeschrieben; Legacy-Accounts können
+    // noch Großbuchstaben enthalten, deshalb zweiter Lookup mit der Roh-Eingabe.
+    const emailNorm = args.email.trim().toLowerCase();
+    let affiliate = await ctx.db
       .query("affiliates")
-      .withIndex("by_email", q => q.eq("email", args.email))
+      .withIndex("by_email", q => q.eq("email", emailNorm))
       .unique();
+    if (!affiliate && emailNorm !== args.email) {
+      affiliate = await ctx.db
+        .query("affiliates")
+        .withIndex("by_email", q => q.eq("email", args.email))
+        .unique();
+    }
 
     const ok = affiliate !== null && await verifyPassword(ctx, affiliate, args.passwordHash);
     if (!ok) {
@@ -320,9 +346,24 @@ export const acceptAffiliateInvite = mutation({
     if (invite.usedAt)                 throw new Error("Dieser Link wurde bereits verwendet");
     if (invite.expiresAt < Date.now()) throw new Error("Einladungslink ist abgelaufen");
 
+    // Gleiche Pflichtangaben wie bei der offenen Registrierung
+    const email       = requireValidEmail(args.email);
+    const name        = requireFilled(args.name, "Name");
+    const phone       = requireFilled(args.phone, "Telefon");
+    const dateOfBirth = requireFilled(args.dateOfBirth, "Geburtsdatum");
+    const address     = requireFilled(args.address, "Adresse");
+    const zip         = requireFilled(args.zip, "PLZ");
+    const city        = requireFilled(args.city, "Stadt");
+    const bankIban    = requireFilled(args.bankIban, "IBAN");
+    const bankName    = requireFilled(args.bankName, "Bankname");
+    if (args.businessType === "business") {
+      requireFilled(args.company, "Firmenname");
+      requireFilled(args.taxId, "Steuernummer");
+    }
+
     const existing = await ctx.db
       .query("affiliates")
-      .withIndex("by_email", q => q.eq("email", args.email))
+      .withIndex("by_email", q => q.eq("email", email))
       .unique();
     if (existing) throw new Error("E-Mail bereits registriert");
 
@@ -337,24 +378,24 @@ export const acceptAffiliateInvite = mutation({
 
     const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {
-      name:         args.name,
-      email:        args.email,
+      name,
+      email,
       passwordHash: await derivePasswordHash(args.passwordHash, salt),
       passwordSalt: salt,
       referralCode: code,
       status:       "pending",
-      phone:        args.phone,
+      phone,
       company:      args.company,
-      dateOfBirth:  args.dateOfBirth,
+      dateOfBirth,
       taxId:        args.taxId,
       vatId:        args.vatId,
-      address:      args.address,
-      zip:          args.zip,
-      city:         args.city,
+      address,
+      zip,
+      city,
       country:      args.country ?? "Deutschland",
-      bankIban:     args.bankIban,
+      bankIban,
       bankBic:      args.bankBic,
-      bankName:     args.bankName,
+      bankName,
       businessType: args.businessType,
     });
 
