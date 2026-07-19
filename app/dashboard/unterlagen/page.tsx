@@ -91,6 +91,37 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: "pwa", title: "Als App aufs Handy (ohne App-Store)", icon: "📲",
+    body: (
+      <div className="space-y-3">
+        <P>
+          Loatycard läuft im Browser, lässt sich aber <b>wie eine echte App auf den
+          Startbildschirm installieren</b>. Kein App-Store, kein Download, kein Konto.
+          Das ist eines deiner stärksten Argumente: die Karte liegt danach mit eigenem
+          Icon auf dem Handy des Kunden, direkt neben WhatsApp und Instagram.
+        </P>
+        <H>So geht die Installation</H>
+        <Li items={[
+          <><b>Android / Chrome:</b> Beim Öffnen der Karte erscheint automatisch der Hinweis „Als App nutzen" mit einem Installieren-Button. Ein Tipp, fertig.</>,
+          <><b>iPhone / Safari:</b> Unten auf das Teilen-Symbol tippen, dann „Zum Home-Bildschirm" wählen. Der Hinweis in der App erklärt das dem Kunden Schritt für Schritt.</>,
+        ]} />
+        <H>Für den Betrieb genauso</H>
+        <P>
+          Auch das Betriebs-Dashboard mit dem Scanner lässt sich als App installieren,
+          sogar auf mehreren Mitarbeiter-Handys gleichzeitig. So ist das Stempeln im
+          Alltag am schnellsten: App antippen, Kunde scannen, fertig.
+        </P>
+        <H>So nutzt du es im Gespräch</H>
+        <P>
+          Installiere die Demo direkt vor den Augen des Inhabers auf deinem Handy und
+          sag: <b>„Genau so liegt Ihre Karte nachher bei jedem Kunden auf dem
+          Startbildschirm, mit Ihrem Logo."</b> Das macht den Unterschied zur
+          Papierkarte sofort greifbar.
+        </P>
+      </div>
+    ),
+  },
+  {
     id: "leitfaden", title: "Gesprächsleitfaden", icon: "🗣",
     body: (
       <div className="space-y-1">
