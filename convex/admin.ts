@@ -4,7 +4,7 @@ import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
-import { recurringPrice } from "./pricing";
+import { recurringPrice, rewardPrice, invoiceTotal, setupFee, applyDiscount, REWARD_PRICE_PER_MONTH } from "./pricing";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
@@ -153,7 +153,7 @@ async function getOrCreateDirectAffiliate(ctx: any) {
   const salt = newSalt();
   const id = await ctx.db.insert("affiliates", {
     name:         "Direktvertrieb (Admin)",
-    email:        "direkt@loatycard.de",
+    email:        "direkt@loyaltycard.info",
     // Zufälliger Hash — mit diesem Konto kann sich niemand einloggen.
     passwordHash: await derivePasswordHash(crypto.randomUUID(), salt),
     passwordSalt: salt,
@@ -688,6 +688,86 @@ export const getContractForLead = query({
       .query("shopContracts")
       .withIndex("by_shopLead", q => q.eq("shopLeadId", args.leadId))
       .unique();
+  },
+});
+
+// ── Vertrag für Stempelkarten-Shop (Bonusprogramm nachträglich einstellen) ────
+
+export const getContractForShop = query({
+  args: { adminSecret: v.string(), loatycardShopId: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const lead = (await ctx.db.query("shopLeads").collect())
+      .find(l => l.loatycardShopId === args.loatycardShopId);
+    if (!lead) return null;
+
+    const contract = await ctx.db
+      .query("shopContracts")
+      .withIndex("by_shopLead", q => q.eq("shopLeadId", lead._id))
+      .unique();
+    if (!contract) return null;
+
+    const rewardCount = contract.rewardCount ?? 0;
+    return {
+      contractId:        contract._id,
+      leadId:            lead._id,
+      planType:          contract.planType,
+      rewardCount,
+      paymentCount:      contract.paymentCount,
+      status:            contract.status,
+      recurringPrice:    recurringPrice(contract.planType, rewardCount),
+      rewardUnitPrice:   rewardPrice(contract.planType),
+      rewardPricePerMonth: REWARD_PRICE_PER_MONTH,
+      setupFee:          setupFee(rewardCount),
+      discountCode:      contract.discountCode ?? null,
+      firstYearDiscount: contract.firstYearDiscount ?? null,
+    };
+  },
+});
+
+// Bonusprogramm (Anzahl Belohnungen) nachträglich ändern. Fließt sofort in alle
+// künftigen Abrechnungen ein (Abo-Betrag wird aus contract.rewardCount berechnet).
+// Steht noch die ERSTE Zahlung aus und ist ein Rabattcode hinterlegt, werden
+// Listen- und Rabattpreis der Erstrechnung neu berechnet (Rabatt gilt weiter).
+export const updateContractRewardCount = mutation({
+  args: {
+    adminSecret: v.string(),
+    contractId:  v.id("shopContracts"),
+    rewardCount: v.number(),
+  },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const contract = await ctx.db.get(args.contractId);
+    if (!contract) throw new ConvexError("Vertrag nicht gefunden");
+
+    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount)));
+    const oldCount    = contract.rewardCount ?? 0;
+
+    await ctx.db.patch(args.contractId, { rewardCount });
+    const lead = await ctx.db.get(contract.shopLeadId);
+    if (lead) await ctx.db.patch(lead._id, { rewardCount });
+
+    // Erste Zahlung noch offen + Rabatt hinterlegt → Erstrechnung neu berechnen,
+    // damit Zahlungsseite und Stripe-Checkout den korrekten Betrag zeigen.
+    if (contract.paymentCount === 0 && contract.firstYearDiscount) {
+      const normalPrice = invoiceTotal(contract.planType, rewardCount, true);
+      await ctx.db.patch(args.contractId, {
+        normalPrice,
+        discountedPrice: applyDiscount(normalPrice, contract.firstYearDiscount),
+      });
+    }
+
+    await ctx.db.insert("auditLog", {
+      entityType: "shopContract",
+      entityId:   args.contractId,
+      action:     "reward_count_changed",
+      actorType:  "admin",
+      note:       `Bonusprogramm: ${oldCount} → ${rewardCount} Belohnung(en)${lead ? ` · ${lead.shopName}` : ""}`,
+    });
+
+    return { rewardCount };
   },
 });
 

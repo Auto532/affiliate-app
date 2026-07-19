@@ -138,7 +138,7 @@ export default function RegisterPage() {
 
       {/* Header */}
       <div className="text-center space-y-1">
-        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard</div>
+        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">LoyaltyCard</div>
         <h1 className="text-2xl font-bold text-[#f2ede4]">Partner werden</h1>
         <p className="text-sm text-[rgba(242,237,228,.5)]">Füll deine Daten aus, danach prüfen wir deinen Account.</p>
       </div>

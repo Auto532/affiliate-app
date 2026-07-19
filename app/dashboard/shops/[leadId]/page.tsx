@@ -8,7 +8,7 @@ import Link from "next/link";
 import QRCode from "react-qr-code";
 
 const APP_URL     = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL     ?? "http://localhost:3000";
-const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de";
+const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
 
 function nextCommission(planType: "annual" | "monthly", paymentCount: number) {
   const next = paymentCount + 1;
@@ -121,7 +121,7 @@ export default function ShopDetailPage() {
             </button>
           </div>
           <div className="flex gap-2">
-            <a href={`mailto:${lead.ownerEmail}?subject=Dein Loatycard Zahlungslink&body=Hallo ${lead.ownerName},%0A%0Ahier ist dein persönlicher Zahlungslink:%0A${payLink}%0A%0ABei Fragen melde dich gerne.`}
+            <a href={`mailto:${lead.ownerEmail}?subject=Dein LoyaltyCard Zahlungslink&body=Hallo ${lead.ownerName},%0A%0Ahier ist dein persönlicher Zahlungslink:%0A${payLink}%0A%0ABei Fragen melde dich gerne.`}
               className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-center transition-colors"
               style={{ background: "rgba(201,162,39,.1)", border: "1px solid rgba(201,162,39,.2)", color: "#c9a227" }}>
               Per E-Mail

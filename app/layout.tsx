@@ -6,8 +6,8 @@ import { ConvexClientProvider } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Loatycard Partner",
-  description: "Affiliate-Portal für Loatycard Wallet",
+  title: "LoyaltyCard Partner",
+  description: "Affiliate-Portal für LoyaltyCard Wallet",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,

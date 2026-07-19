@@ -30,7 +30,7 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard</p>
+          <p className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">LoyaltyCard</p>
           <h1 className="text-xl font-bold text-[#f2ede4]">Hallo, {me.name.split(" ")[0]}</h1>
         </div>
         <button onClick={() => { localStorage.removeItem("affiliate_token"); router.push("/login"); }}

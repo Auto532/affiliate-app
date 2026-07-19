@@ -2,7 +2,7 @@
 import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
-import { planPrice, rewardPrice, invoiceTotal, SETUP_FEE, applyDiscount } from "./pricing";
+import { planPrice, rewardPrice, invoiceTotal, setupFee as setupFeeFor, applyDiscount } from "./pricing";
 import { lookupDiscount } from "./discounts";
 import { escapeHtml } from "./htmlEscape";
 
@@ -45,7 +45,7 @@ export const getByPaymentToken = query({
     const isFirst      = contract.paymentCount === 0;
     const aboPrice     = planPrice(contract.planType);
     const rewardsPrice = rewardPrice(contract.planType) * rewardCount;
-    const setupFee     = isFirst ? SETUP_FEE : 0;
+    const setupFee     = isFirst ? setupFeeFor(rewardCount) : 0;
     const normalPrice  = aboPrice + rewardsPrice + setupFee;   // Listenbetrag dieser Rechnung
     const payableAmount = (isFirst && contract.firstYearDiscount)
       ? (contract.discountedPrice ?? applyDiscount(normalPrice, contract.firstYearDiscount))
@@ -54,7 +54,7 @@ export const getByPaymentToken = query({
     return {
       contractId: contract._id,
       planType:   contract.planType,
-      shopName:   lead?.shopName ?? "Loatycard Shop",
+      shopName:   lead?.shopName ?? "LoyaltyCard Shop",
       ownerName:  lead?.ownerName ?? "",
       amount:     normalPrice,     // Listenbetrag dieser Rechnung (Referenz)
       payableAmount,               // tatsächlich zu zahlen
@@ -414,7 +414,7 @@ export const createStripeCheckout = action({
       const lineItems: NonNullable<CheckoutParams["line_items"]> = [{
         price_data: {
           currency: "eur",
-          product_data: { name: `Loatycard ${planLabel}`, description: info.shopName },
+          product_data: { name: `LoyaltyCard ${planLabel}`, description: info.shopName },
           unit_amount: Math.round(info.aboPrice * 100),
           recurring: { interval },
         },
@@ -435,7 +435,7 @@ export const createStripeCheckout = action({
         price_data: {
           currency: "eur",
           product_data: { name: "Einrichtung & individuelles Design (einmalig)" },
-          unit_amount: Math.round(SETUP_FEE * 100),
+          unit_amount: Math.round(setupFeeFor(info.rewardCount) * 100),
         },
         quantity: 1,
       });
@@ -464,7 +464,7 @@ export const createStripeCheckout = action({
     } else {
       // Einmalzahlung (Pilot-Modus): tatsächlich zu zahlender Betrag inkl.
       // Bonusprogramm + Einrichtung, Rabatt bereits abgezogen.
-      const parts = [`Loatycard ${planLabel}`];
+      const parts = [`LoyaltyCard ${planLabel}`];
       if (info.rewardCount > 0) parts.push(`Bonusprogramm (${info.rewardCount})`);
       if (info.setupFee > 0)    parts.push("Einrichtung & Design");
       sessionParams = {

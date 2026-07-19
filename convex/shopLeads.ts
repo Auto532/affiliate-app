@@ -198,6 +198,16 @@ export const acceptInvite = mutation({
       note:       `${args.ownerName} · Plan: ${planType}`,
     });
 
+    // Gleiche Willkommens-Mail wie beim Direktformular — der Abschluss über den
+    // Einladungslink ist derselbe Vertragsabschluss.
+    await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+      ownerEmail,
+      ownerName,
+      shopName,
+      planType,
+      rewardCount,
+    });
+
     const inviteAffiliate = await ctx.db.get(lead.affiliateId);
     await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
       shopName,

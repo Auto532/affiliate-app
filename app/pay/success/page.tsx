@@ -32,7 +32,7 @@ function SuccessContent() {
           <p className="text-sm text-[rgba(242,237,228,.5)] mt-2">
             {method === "test"
               ? "Test-Zahlung erfasst. Du wirst zur Übersicht weitergeleitet…"
-              : "Deine Zahlung wurde bestätigt. Deine Loatycard-Stempelkarte wird in Kürze eingerichtet."}
+              : "Deine Zahlung wurde bestätigt. Deine LoyaltyCard-Stempelkarte wird in Kürze eingerichtet."}
           </p>
         </div>
       </div>

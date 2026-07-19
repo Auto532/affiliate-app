@@ -11,7 +11,7 @@ import QRCode from "react-qr-code";
 
 const GOLD = "#c9a227";
 const CARD: React.CSSProperties = { background: "#17150f", border: "1px solid rgba(255,255,255,.06)" };
-const DEMO_URL = `${process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de"}/demo`;
+const DEMO_URL = `${process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info"}/demo`;
 
 // ── Inhalte ───────────────────────────────────────────────────────────────────
 
@@ -50,7 +50,7 @@ const SECTIONS: Section[] = [
       <div className="space-y-3">
         <div className="rounded-xl p-3" style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.25)" }}>
           <P>
-            „Loatycard ersetzt die Papier-Stempelkarte durch eine digitale Karte auf dem Handy,
+            „LoyaltyCard ersetzt die Papier-Stempelkarte durch eine digitale Karte auf dem Handy,
             <b> ohne App-Download</b>, für niemanden. Der Kunde scannt einmal einen QR-Code, hat seine
             Karte immer dabei und kommt öfter wieder. Und Sie sehen zum ersten Mal, wer Ihre
             Stammkunden wirklich sind."
@@ -95,7 +95,7 @@ const SECTIONS: Section[] = [
     body: (
       <div className="space-y-3">
         <P>
-          Loatycard läuft im Browser, lässt sich aber <b>wie eine echte App auf den
+          LoyaltyCard läuft im Browser, lässt sich aber <b>wie eine echte App auf den
           Startbildschirm installieren</b>. Kein App-Store, kein Download, kein Konto.
           Das ist eines deiner stärksten Argumente: die Karte liegt danach mit eigenem
           Icon auf dem Handy des Kunden, direkt neben WhatsApp und Instagram.
@@ -144,8 +144,8 @@ const SECTIONS: Section[] = [
           {[
             { name: "Jahresabo",               preis: "240 € / Jahr",   detail: "Rund 66 Cent pro Tag. Das Hauptprodukt: digitale Stempelkarte, QR-Scanner, Kunden-Statistiken." },
             { name: "Monatsabo",               preis: "20 € / Monat",   detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
-            { name: "Einrichtung & Design",    preis: "99 € einmalig",  detail: "Bei jedem Shop dabei (Pflichtbestandteil): komplette Einrichtung plus individuelles Design: eigenes Logo, eigene Farben, eigener Look. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
-            { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat, beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt." },
+            { name: "Einrichtung & Design",    preis: "99 € einmalig · 45 € mit Bonusprogramm",  detail: "Bei jedem Shop dabei (Pflichtbestandteil): komplette Einrichtung plus individuelles Design: eigenes Logo, eigene Farben, eigener Look. Bucht der Shop das Bonusprogramm, kostet die Einrichtung einmalig nur 45 €. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
+            { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat, beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt. Starkes Verkaufsargument: Mit Bonusprogramm sinkt die Einrichtung von 99 € auf 45 €." },
           ].map(p => (
             <div key={p.name} className="rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
               <div className="flex items-baseline justify-between gap-2">
@@ -170,7 +170,7 @@ const SECTIONS: Section[] = [
           <><b>Karte ist immer dabei:</b> nichts geht verloren, nichts wird vergessen oder durchgewaschen.</>,
           <><b>Der Betrieb sieht endlich Daten:</b> wer kommt wie oft, was wird eingelöst, wer sind die Top-Kunden.</>,
           <><b>Bonus-Stufen & Meilensteine:</b> mehrstufige Belohnungen bringen Kunden messbar öfter zurück als „10 Stempel = 1 gratis".</>,
-          <><b>Einrichtung ohne Aufwand:</b> Loatycard richtet alles ein, der Betrieb stellt nur den QR-Code auf.</>,
+          <><b>Einrichtung ohne Aufwand:</b> LoyaltyCard richtet alles ein, der Betrieb stellt nur den QR-Code auf.</>,
           <><b>Eigenes Design:</b> mit Logo und Farben fühlt es sich wie die eigene App des Ladens an.</>,
         ]} />
         <H>Wo die Grenzen sind (ehrlich bleiben!)</H>
@@ -212,7 +212,7 @@ const SECTIONS: Section[] = [
           <>Mit dem Inhaber sprechen, freundlich nach ihm fragen, wenn er nicht da ist, und wiederkommen.</>,
           <>Immer die Live-Demo am eigenen Handy zeigen. Zeigen schlägt Erzählen.</>,
           <>Konkreten nächsten Schritt vereinbaren: Abschluss, Folgetermin oder Einladungslink.</>,
-          <>Gepflegt auftreten, du repräsentierst Loatycard.</>,
+          <>Gepflegt auftreten, du repräsentierst LoyaltyCard.</>,
         ]} />
         <H>Don't</H>
         <Li color="#f87171" items={[
@@ -274,7 +274,7 @@ export default function UnterlagenPage() {
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-bold tracking-[.3em] uppercase" style={{ color: GOLD }}>Unterlagen</p>
-          <h1 className="text-xl font-bold text-[#f2ede4]">Verkaufen mit Loatycard</h1>
+          <h1 className="text-xl font-bold text-[#f2ede4]">Verkaufen mit LoyaltyCard</h1>
         </div>
         <Link href="/dashboard" className="text-xs text-[rgba(242,237,228,.4)] hover:text-[rgba(242,237,228,.7)]">← Zurück</Link>
       </div>

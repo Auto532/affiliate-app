@@ -64,7 +64,7 @@ export default function InvitePage() {
         </div>
         <div className="rounded-xl px-4 py-3 text-sm text-[rgba(242,237,228,.6)]"
           style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)" }}>
-          Powered by <span className="font-bold text-[#c9a227]">Loatycard Wallet</span>
+          Powered by <span className="font-bold text-[#c9a227]">LoyaltyCard Wallet</span>
           <br />
           <span className="text-xs">Digitale Stempelkarten für lokale Geschäfte</span>
         </div>
@@ -77,17 +77,17 @@ export default function InvitePage() {
 
       {/* Header */}
       <div className="text-center space-y-2">
-        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard Wallet</div>
+        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">LoyaltyCard Wallet</div>
         <h1 className="text-2xl font-bold text-[#f2ede4]">Du wurdest eingeladen</h1>
         <p className="text-sm text-[rgba(242,237,228,.5)]">
           Füll deine Shop-Daten aus, wir kümmern uns um den Rest.
         </p>
       </div>
 
-      {/* Was ist Loatycard */}
+      {/* Was ist LoyaltyCard */}
       <div className="rounded-2xl p-4 space-y-2"
         style={{ background: "#17150f", border: "1px solid rgba(201,162,39,.2)", borderLeft: "3px solid #c9a227" }}>
-        <p className="text-sm font-semibold text-[#f2ede4]">Was ist Loatycard Wallet?</p>
+        <p className="text-sm font-semibold text-[#f2ede4]">Was ist LoyaltyCard Wallet?</p>
         <p className="text-xs text-[rgba(242,237,228,.5)] leading-relaxed">
           Digitale Stempelkarten für dein Geschäft, ohne App und ohne Plastikkarten.
           Deine Kunden sammeln Stempel per QR-Code und du bindest sie langfristig.
@@ -126,7 +126,9 @@ export default function InvitePage() {
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
             <div>
               <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Belohnung{rewardCount === 1 ? "" : "en"}</p>
-              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">5 € / Monat pro Belohnung</p>
+              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">
+                5 € / Monat pro Belohnung{rewardCount > 0 ? " · Einrichtung nur 45 € statt 99 €" : " · senkt die Einrichtung auf 45 €"}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}

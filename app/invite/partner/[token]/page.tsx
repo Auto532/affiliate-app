@@ -141,7 +141,7 @@ export default function PartnerInvitePage() {
 
       {/* Header */}
       <div className="text-center space-y-1">
-        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard Wallet</div>
+        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">LoyaltyCard Wallet</div>
         <h1 className="text-2xl font-bold text-[#f2ede4]">Partner werden</h1>
         <p className="text-sm text-[rgba(242,237,228,.5)]">Füll deine Daten aus, du wirst danach freigeschaltet.</p>
       </div>

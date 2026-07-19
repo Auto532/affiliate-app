@@ -37,7 +37,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase mb-2">Loatycard</div>
+          <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase mb-2">LoyaltyCard</div>
           <h1 className="text-2xl font-bold text-[#f2ede4]">Partner-Login</h1>
         </div>
 

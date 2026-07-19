@@ -67,7 +67,7 @@ export default function SupportPage() {
       ) : (
         <div className="rounded-2xl p-4 space-y-3" style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.06)" }}>
           <p className="text-xs text-[rgba(242,237,228,.5)]">
-            Problem, Frage oder Feedback? Schreib uns, die Nachricht geht direkt ans Loatycard-Team.
+            Problem, Frage oder Feedback? Schreib uns, die Nachricht geht direkt ans LoyaltyCard-Team.
           </p>
           <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={5}
             placeholder="Beschreibe dein Anliegen…"
@@ -127,7 +127,7 @@ export default function SupportPage() {
                       ? { background: "rgba(34,197,94,.08)", border: "1px solid rgba(34,197,94,.25)" }
                       : { background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.25)" }}>
                     <p className="text-[9px] font-semibold mb-0.5" style={{ color: m.from === "admin" ? "#4ade80" : "#c9a227" }}>
-                      {m.from === "admin" ? "Loatycard-Team" : "Du"}
+                      {m.from === "admin" ? "LoyaltyCard-Team" : "Du"}
                     </p>
                     <p className="text-xs text-[rgba(242,237,228,.85)] whitespace-pre-wrap">{m.text}</p>
                   </div>

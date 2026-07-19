@@ -64,7 +64,7 @@ export default function PayPage() {
         <div>
           <h2 className="text-xl font-bold text-[#f2ede4]">Zahlung abgeschlossen</h2>
           <p className="text-sm text-[rgba(242,237,228,.5)] mt-2">
-            Deine Loatycard-Stempelkarte wird eingerichtet.
+            Deine LoyaltyCard-Stempelkarte wird eingerichtet.
           </p>
         </div>
       </div>
@@ -89,7 +89,7 @@ export default function PayPage() {
 
       {/* Header */}
       <div className="text-center space-y-1">
-        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard</div>
+        <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">LoyaltyCard</div>
         <h1 className="text-2xl font-bold text-[#f2ede4]">Zahlung abschließen</h1>
       </div>
 
@@ -99,7 +99,7 @@ export default function PayPage() {
         <div className="flex items-center justify-between">
           <div>
             <p className="font-semibold text-[#f2ede4]">{info.shopName}</p>
-            <p className="text-xs text-[rgba(242,237,228,.4)]">Loatycard {planLabel}</p>
+            <p className="text-xs text-[rgba(242,237,228,.4)]">LoyaltyCard {planLabel}</p>
           </div>
           <div className="text-right">
             {info.firstYearDiscount ? (
@@ -206,7 +206,7 @@ export default function PayPage() {
       <TestPaymentButton token={token} />{/* ⚠️ TEST-ONLY — vor Live-Schaltung entfernen */}
 
       <p className="text-center text-[10px] text-[rgba(242,237,228,.2)]">
-        Sichere Zahlung · SSL-verschlüsselt · Loatycard GmbH
+        Sichere Zahlung · SSL-verschlüsselt · LoyaltyCard GmbH
       </p>
     </div>
   );

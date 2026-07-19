@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name:             "Loatycard Partner",
+    name:             "LoyaltyCard Partner",
     short_name:       "LC Partner",
-    description:      "Loatycard Affiliate-Portal",
+    description:      "LoyaltyCard Affiliate-Portal",
     start_url:        "/dashboard",
     display:          "standalone",
     background_color: "#0d0c0a",

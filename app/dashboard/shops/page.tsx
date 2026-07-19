@@ -6,7 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loatycard.de";
+const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
 
 function nextCommission(planType: "annual" | "monthly", paymentCount: number) {
   const next = paymentCount + 1;
