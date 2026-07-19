@@ -1,13 +1,13 @@
 import { mutation, query, internalAction } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { escapeHtml } from "./htmlEscape";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
-  if (!expected) throw new Error("ADMIN_SECRET nicht gesetzt");
-  if (secret !== expected) throw new Error("Kein Zugriff");
+  if (!expected) throw new ConvexError("ADMIN_SECRET nicht gesetzt");
+  if (secret !== expected) throw new ConvexError("Kein Zugriff");
 }
 
 // Support-Anfrage vom Partner (auth via Session-Token). Wird gespeichert +
@@ -25,13 +25,13 @@ export const submitTicket = mutation({
       .query("affiliateSessions")
       .withIndex("by_token", q => q.eq("token", args.token))
       .unique();
-    if (!session || session.expiresAt < Date.now()) throw new Error("Nicht eingeloggt");
+    if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
     const affiliate = await ctx.db.get(session.affiliateId);
-    if (!affiliate) throw new Error("Account nicht gefunden");
+    if (!affiliate) throw new ConvexError("Account nicht gefunden");
 
     const message = args.message.trim();
-    if (!message) throw new Error("Bitte beschreibe dein Anliegen");
-    if (message.length > 2000) throw new Error("Nachricht zu lang (max. 2000 Zeichen)");
+    if (!message) throw new ConvexError("Bitte beschreibe dein Anliegen");
+    if (message.length > 2000) throw new ConvexError("Nachricht zu lang (max. 2000 Zeichen)");
 
     await ctx.db.insert("supportTickets", {
       affiliateId: affiliate._id, message,
@@ -93,13 +93,13 @@ export const replyTicket = mutation({
       .query("affiliateSessions")
       .withIndex("by_token", q => q.eq("token", args.token))
       .unique();
-    if (!session || session.expiresAt < Date.now()) throw new Error("Nicht eingeloggt");
+    if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
     const affiliate = await ctx.db.get(session.affiliateId);
     const ticket = await ctx.db.get(args.ticketId);
-    if (!ticket || ticket.affiliateId !== session.affiliateId) throw new Error("Ticket nicht gefunden");
+    if (!ticket || ticket.affiliateId !== session.affiliateId) throw new ConvexError("Ticket nicht gefunden");
     const message = args.message.trim();
-    if (!message) throw new Error("Nachricht ist leer");
-    if (message.length > 2000) throw new Error("Nachricht zu lang (max. 2000 Zeichen)");
+    if (!message) throw new ConvexError("Nachricht ist leer");
+    if (message.length > 2000) throw new ConvexError("Nachricht zu lang (max. 2000 Zeichen)");
 
     await ctx.db.patch(args.ticketId, {
       thread: [...(ticket.thread ?? []), { from: "user" as const, text: message, at: Date.now() }],
@@ -144,7 +144,7 @@ export const adminAnswerTicket = mutation({
   handler: async (ctx, { adminSecret, ticketId, reply, status }) => {
     requireAdmin(adminSecret);
     const ticket = await ctx.db.get(ticketId);
-    if (!ticket) throw new Error("Ticket nicht gefunden");
+    if (!ticket) throw new ConvexError("Ticket nicht gefunden");
     const patch: Record<string, unknown> = {};
     const trimmed = reply?.trim();
     if (trimmed) {

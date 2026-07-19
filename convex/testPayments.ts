@@ -17,22 +17,22 @@
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { action } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 
 export const simulateTestPayment = action({
   args: { paymentToken: v.string(), adminSecret: v.string() },
   handler: async (ctx, args): Promise<void> => {
     if (process.env.TEST_PAYMENTS_ENABLED !== "true") {
-      throw new Error("Testzahlungen sind deaktiviert");
+      throw new ConvexError("Testzahlungen sind deaktiviert");
     }
     const expected = process.env.ADMIN_SECRET;
     if (!expected || args.adminSecret !== expected) {
-      throw new Error("Nicht autorisiert");
+      throw new ConvexError("Nicht autorisiert");
     }
 
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
-    if (!info) throw new Error("Ungültiger Zahlungslink");
+    if (!info) throw new ConvexError("Ungültiger Zahlungslink");
 
     const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
       shopContractId: info.contractId,

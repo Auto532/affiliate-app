@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
+import { errMsg } from "@/app/lib/errMsg";
 
 async function sha256(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -104,7 +105,7 @@ export default function RegisterPage() {
       });
       setDone(true);
     } catch (err: any) {
-      setError(err.message ?? "Fehler bei der Registrierung");
+      setError(errMsg(err, "Fehler bei der Registrierung"));
     } finally { setLoading(false); }
   };
 

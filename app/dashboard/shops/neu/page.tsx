@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { errMsg } from "@/app/lib/errMsg";
 
 export default function NewShopPage() {
   const router     = useRouter();
@@ -47,7 +48,7 @@ export default function NewShopPage() {
       });
       router.push(`/dashboard/shops/${leadId}`);
     } catch (err: any) {
-      setError(err.message ?? "Fehler beim Einreichen");
+      setError(errMsg(err, "Fehler beim Einreichen"));
     } finally { setLoading(false); }
   };
 

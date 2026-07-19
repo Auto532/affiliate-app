@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 // Serverseitige Eingabe-Validierung. Der Client prüft dieselben Regeln für
 // gutes Feedback, verbindlich ist aber immer der Server.
 
@@ -10,12 +11,12 @@ export function isValidEmail(email: string): boolean {
 
 export function requireValidEmail(email: string, label = "E-Mail"): string {
   const trimmed = email.trim().toLowerCase();
-  if (!isValidEmail(trimmed)) throw new Error(`${label}: bitte eine gültige E-Mail-Adresse angeben`);
+  if (!isValidEmail(trimmed)) throw new ConvexError(`${label}: bitte eine gültige E-Mail-Adresse angeben`);
   return trimmed;
 }
 
 export function requireFilled(value: string | undefined, label: string): string {
   const trimmed = (value ?? "").trim();
-  if (!trimmed) throw new Error(`${label} ist ein Pflichtfeld`);
+  if (!trimmed) throw new ConvexError(`${label} ist ein Pflichtfeld`);
   return trimmed;
 }

@@ -1,5 +1,5 @@
 ﻿import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { planPrice, rewardPrice, invoiceTotal, SETUP_FEE, applyDiscount } from "./pricing";
@@ -399,7 +399,7 @@ export const createStripeCheckout = action({
     const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2026-06-24.dahlia" });
 
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
-    if (!info) throw new Error("Ungültiger Zahlungslink");
+    if (!info) throw new ConvexError("Ungültiger Zahlungslink");
 
     const subscriptionMode = process.env.STRIPE_SUBSCRIPTION_MODE === "true";
     const planLabel = info.planType === "annual" ? "Jahresabo" : "Monatsabo";
@@ -501,7 +501,7 @@ export const handleStripeWebhook = action({
     try {
       event = stripe.webhooks.constructEvent(args.payload, args.signature, STRIPE_WEBHOOK);
     } catch {
-      throw new Error("Webhook-Signatur ungültig");
+      throw new ConvexError("Webhook-Signatur ungültig");
     }
 
     // Einmalzahlung: Zahlung direkt beim Checkout erfassen

@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { derivePasswordHash, newSalt, timingSafeEqual } from "./passwords";
 import { assertNotLocked, recordFailure, clearFailures } from "./rateLimit";
 import { requireValidEmail, requireFilled } from "./validation";
@@ -71,7 +71,7 @@ export const register = mutation({
       .query("affiliates")
       .withIndex("by_email", q => q.eq("email", email))
       .unique();
-    if (existing) throw new Error("E-Mail bereits registriert");
+    if (existing) throw new ConvexError("E-Mail bereits registriert");
 
     // Referral-Code generieren: 2 Buchstaben aus Name + 4 Ziffern
     const initials = args.name.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase() || "AF";
@@ -81,7 +81,7 @@ export const register = mutation({
       const num = Math.floor(1000 + Math.random() * 9000);
       code = `${initials}-${num}`;
       tries++;
-      if (tries > 20) throw new Error("Code-Generierung fehlgeschlagen");
+      if (tries > 20) throw new ConvexError("Code-Generierung fehlgeschlagen");
     } while (
       await ctx.db.query("affiliates").withIndex("by_referralCode", q => q.eq("referralCode", code)).unique()
     );
@@ -146,15 +146,15 @@ export const login = mutation({
     const ok = affiliate !== null && await verifyPassword(ctx, affiliate, args.passwordHash);
     if (!ok) {
       await recordFailure(ctx, throttleKey, throttle);
-      throw new Error("Ungültige Zugangsdaten");
+      throw new ConvexError("Ungültige Zugangsdaten");
     }
     await clearFailures(ctx, throttle);
 
     const aff = affiliate!;
     if (aff.status === "pending")
-      throw new Error("Dein Account wartet noch auf Freigabe");
+      throw new ConvexError("Dein Account wartet noch auf Freigabe");
     if (aff.status === "suspended")
-      throw new Error("Dein Account wurde gesperrt");
+      throw new ConvexError("Dein Account wurde gesperrt");
 
     const token = crypto.randomUUID();
     const now   = Date.now();
@@ -196,7 +196,7 @@ export const updateBankDetails = mutation({
       .query("affiliateSessions")
       .withIndex("by_token", q => q.eq("token", args.token))
       .unique();
-    if (!session || session.expiresAt < Date.now()) throw new Error("Nicht eingeloggt");
+    if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
 
     await ctx.db.patch(session.affiliateId, {
       bankIban: args.bankIban,
@@ -218,9 +218,9 @@ async function affiliateFromToken(ctx: MutationCtx, token: string): Promise<Doc<
     .query("affiliateSessions")
     .withIndex("by_token", q => q.eq("token", token))
     .unique();
-  if (!session || session.expiresAt < Date.now()) throw new Error("Nicht eingeloggt");
+  if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
   const affiliate = await ctx.db.get(session.affiliateId);
-  if (!affiliate) throw new Error("Account nicht gefunden");
+  if (!affiliate) throw new ConvexError("Account nicht gefunden");
   return affiliate;
 }
 
@@ -342,9 +342,9 @@ export const acceptAffiliateInvite = mutation({
       .withIndex("by_token", q => q.eq("token", args.inviteToken))
       .unique();
 
-    if (!invite)                       throw new Error("Ungültiger Einladungslink");
-    if (invite.usedAt)                 throw new Error("Dieser Link wurde bereits verwendet");
-    if (invite.expiresAt < Date.now()) throw new Error("Einladungslink ist abgelaufen");
+    if (!invite)                       throw new ConvexError("Ungültiger Einladungslink");
+    if (invite.usedAt)                 throw new ConvexError("Dieser Link wurde bereits verwendet");
+    if (invite.expiresAt < Date.now()) throw new ConvexError("Einladungslink ist abgelaufen");
 
     // Gleiche Pflichtangaben wie bei der offenen Registrierung
     const email       = requireValidEmail(args.email);
@@ -365,7 +365,7 @@ export const acceptAffiliateInvite = mutation({
       .query("affiliates")
       .withIndex("by_email", q => q.eq("email", email))
       .unique();
-    if (existing) throw new Error("E-Mail bereits registriert");
+    if (existing) throw new ConvexError("E-Mail bereits registriert");
 
     const initials = args.name.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase() || "AF";
     let code = "";
@@ -374,7 +374,7 @@ export const acceptAffiliateInvite = mutation({
       const taken = await ctx.db.query("affiliates").withIndex("by_referralCode", q => q.eq("referralCode", candidate)).unique();
       if (!taken) { code = candidate; break; }
     }
-    if (!code) throw new Error("Code-Generierung fehlgeschlagen");
+    if (!code) throw new ConvexError("Code-Generierung fehlgeschlagen");
 
     const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {

@@ -5,6 +5,7 @@ import { api } from "@/convex/_generated/api";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import TestPaymentButton from "./TestPaymentButton"; // ⚠️ TEST-ONLY — vor Live-Schaltung entfernen
+import { errMsg } from "@/app/lib/errMsg";
 
 export default function PayPage() {
   const params = useParams();
@@ -32,7 +33,7 @@ export default function PayPage() {
         setDiscountMsg({ ok: false, text: res.reason ?? "Code ungültig" });
       }
     } catch (e: any) {
-      setDiscountMsg({ ok: false, text: e.message ?? "Fehler" });
+      setDiscountMsg({ ok: false, text: errMsg(e, "Fehler") });
     } finally { setDiscountLoading(false); }
   };
 
@@ -76,7 +77,7 @@ export default function PayPage() {
       const { url } = await createStripe({ paymentToken: token });
       if (url) window.location.href = url;
     } catch (e: any) {
-      setError(e.message ?? "Fehler");
+      setError(errMsg(e, "Fehler"));
       setStripeLoading(false);
     }
   };

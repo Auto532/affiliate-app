@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { errMsg } from "@/app/lib/errMsg";
 
 export default function LoginPage() {
   const router   = useRouter();
@@ -28,7 +29,7 @@ export default function LoginPage() {
       localStorage.setItem("affiliate_token", token);
       router.push("/dashboard");
     } catch (err: any) {
-      setError(err.message ?? "Fehler beim Login");
+      setError(errMsg(err, "Fehler beim Login"));
     } finally { setLoading(false); }
   };
 

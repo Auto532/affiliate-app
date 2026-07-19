@@ -3,6 +3,7 @@
 // Kein IP-Zugriff in Convex-Mutationen → Schlüssel ist z.B. die E-Mail (Login)
 // bzw. ein fester Schlüssel (Admin-PIN).
 
+import { ConvexError } from "convex/values";
 import type { MutationCtx } from "./_generated/server";
 
 const MAX_ATTEMPTS = 5;
@@ -18,7 +19,7 @@ export async function assertNotLocked(ctx: MutationCtx, key: string): Promise<Th
     .unique();
   if (rec?.lockedUntil && rec.lockedUntil > Date.now()) {
     const mins = Math.ceil((rec.lockedUntil - Date.now()) / 60000);
-    throw new Error(`Zu viele Fehlversuche. Bitte in ${mins} Minute(n) erneut versuchen.`);
+    throw new ConvexError(`Zu viele Fehlversuche. Bitte in ${mins} Minute(n) erneut versuchen.`);
   }
   return rec as Throttle;
 }

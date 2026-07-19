@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { errMsg } from "@/app/lib/errMsg";
 
 export default function SupportPage() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function SupportPage() {
       await submit({ token, message: msg, contact: contact || undefined });
       setDone(true);
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Fehler beim Senden");
+      setErr(errMsg(e, "Fehler beim Senden"));
     } finally { setSending(false); }
   };
 

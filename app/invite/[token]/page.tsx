@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useParams, useRouter } from "next/navigation";
+import { errMsg } from "@/app/lib/errMsg";
 
 export default function InvitePage() {
   const params    = useParams();
@@ -42,7 +43,7 @@ export default function InvitePage() {
       });
       setDone(true);
     } catch (err: any) {
-      setError(err.message ?? "Ungültiger oder abgelaufener Einladungslink");
+      setError(errMsg(err, "Ungültiger oder abgelaufener Einladungslink"));
     } finally { setLoading(false); }
   };
 

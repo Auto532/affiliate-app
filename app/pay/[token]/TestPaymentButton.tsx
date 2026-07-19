@@ -9,6 +9,7 @@ import { useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { errMsg } from "@/app/lib/errMsg";
 
 export default function TestPaymentButton({ token }: { token: string }) {
   const router   = useRouter();
@@ -23,7 +24,7 @@ export default function TestPaymentButton({ token }: { token: string }) {
       await simulate({ paymentToken: token, adminSecret: pin });
       router.replace("/pay/success?method=test");
     } catch (e: any) {
-      setError(e.message ?? "Fehler");
+      setError(errMsg(e, "Fehler"));
       setLoading(false);
     }
   };

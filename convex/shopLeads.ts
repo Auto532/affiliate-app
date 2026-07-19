@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { requireValidEmail, requireFilled } from "./validation";
 
@@ -8,9 +8,9 @@ async function requireAffiliate(ctx: any, token: string) {
     .query("affiliateSessions")
     .withIndex("by_token", (q: any) => q.eq("token", token))
     .unique();
-  if (!session || session.expiresAt < Date.now()) throw new Error("Nicht eingeloggt");
+  if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
   const affiliate = await ctx.db.get(session.affiliateId);
-  if (!affiliate || affiliate.status !== "active") throw new Error("Kein Zugriff");
+  if (!affiliate || affiliate.status !== "active") throw new ConvexError("Kein Zugriff");
   return affiliate;
 }
 
@@ -39,7 +39,7 @@ export const submitLead = mutation({
       .query("shopLeads")
       .withIndex("by_ownerEmail", q => q.eq("ownerEmail", ownerEmail))
       .unique();
-    if (existing) throw new Error("Ein Shop mit dieser E-Mail wurde bereits eingereicht");
+    if (existing) throw new ConvexError("Ein Shop mit dieser E-Mail wurde bereits eingereicht");
 
     const now         = Date.now();
     const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
@@ -148,10 +148,10 @@ export const acceptInvite = mutation({
       .withIndex("by_inviteToken", q => q.eq("inviteToken", args.inviteToken))
       .unique();
 
-    if (!lead)                                    throw new Error("Ungültiger Einladungslink");
-    if (lead.status !== "draft")                  throw new Error("Dieser Link wurde bereits genutzt");
+    if (!lead)                                    throw new ConvexError("Ungültiger Einladungslink");
+    if (lead.status !== "draft")                  throw new ConvexError("Dieser Link wurde bereits genutzt");
     if (lead.inviteExpiresAt && lead.inviteExpiresAt < Date.now())
-                                                  throw new Error("Der Einladungslink ist abgelaufen");
+                                                  throw new ConvexError("Der Einladungslink ist abgelaufen");
 
     const shopName   = requireFilled(args.shopName, "Name des Geschäfts");
     const ownerName  = requireFilled(args.ownerName, "Name");
@@ -161,7 +161,7 @@ export const acceptInvite = mutation({
       .query("shopLeads")
       .withIndex("by_ownerEmail", q => q.eq("ownerEmail", ownerEmail))
       .unique();
-    if (existing && existing._id !== lead._id) throw new Error("Diese E-Mail ist bereits registriert");
+    if (existing && existing._id !== lead._id) throw new ConvexError("Diese E-Mail ist bereits registriert");
 
     const now         = Date.now();
     const planType    = args.planType ?? "annual";
@@ -224,9 +224,9 @@ export const deletePendingLead = mutation({
   handler: async (ctx, args) => {
     const affiliate = await requireAffiliate(ctx, args.token);
     const lead = await ctx.db.get(args.leadId);
-    if (!lead) throw new Error("Shop nicht gefunden");
-    if (lead.affiliateId !== affiliate._id) throw new Error("Kein Zugriff");
-    if (lead.status !== "pending_payment") throw new Error("Nur ausstehende Shops können gelöscht werden");
+    if (!lead) throw new ConvexError("Shop nicht gefunden");
+    if (lead.affiliateId !== affiliate._id) throw new ConvexError("Kein Zugriff");
+    if (lead.status !== "pending_payment") throw new ConvexError("Nur ausstehende Shops können gelöscht werden");
 
     const contract = await ctx.db
       .query("shopContracts")

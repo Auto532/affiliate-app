@@ -5,6 +5,7 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { errMsg } from "@/app/lib/errMsg";
 
 // Felder, die sofort übernommen werden vs. die auf Admin-Freigabe warten.
 const IMMEDIATE = ["phone", "address", "zip", "city", "country"] as const;
@@ -86,7 +87,7 @@ export default function ProfilePage() {
         setMsg({ ok: true, text: "Profil aktualisiert." });
       }
     } catch (e: any) {
-      setMsg({ ok: false, text: e.message ?? "Fehler beim Speichern" });
+      setMsg({ ok: false, text: errMsg(e, "Fehler beim Speichern") });
     } finally { setSaving(false); }
   };
 

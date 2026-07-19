@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server";
-import { v } from "convex/values";
+import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
@@ -10,8 +10,8 @@ function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
   // Kein unsicherer Default: ist das Secret nicht gesetzt, wird jeder Zugriff
   // verweigert (statt auf ein rate-bares "changeme" zurückzufallen).
-  if (!expected) throw new Error("ADMIN_SECRET nicht gesetzt");
-  if (secret !== expected) throw new Error("Kein Zugriff");
+  if (!expected) throw new ConvexError("ADMIN_SECRET nicht gesetzt");
+  if (secret !== expected) throw new ConvexError("Kein Zugriff");
 }
 
 // ── Alle Daten löschen (Test-Reset) ──────────────────────────────────────────
@@ -78,7 +78,7 @@ export const createAffiliate = mutation({
     requireAdmin(args.adminSecret);
 
     const existing = await ctx.db.query("affiliates").withIndex("by_email", q => q.eq("email", args.email)).unique();
-    if (existing) throw new Error("E-Mail bereits registriert");
+    if (existing) throw new ConvexError("E-Mail bereits registriert");
 
     // Referral-Code generieren: Initialen + 4 Ziffern
     const initials = args.name.split(" ").map(w => w[0]?.toUpperCase() ?? "X").join("").slice(0, 2);
@@ -88,7 +88,7 @@ export const createAffiliate = mutation({
       const taken = await ctx.db.query("affiliates").withIndex("by_referralCode", q => q.eq("referralCode", candidate)).unique();
       if (!taken) { referralCode = candidate; break; }
     }
-    if (!referralCode) throw new Error("Referral-Code konnte nicht generiert werden");
+    if (!referralCode) throw new ConvexError("Referral-Code konnte nicht generiert werden");
 
     const salt = newSalt();
     const affiliateId = await ctx.db.insert("affiliates", {
@@ -184,12 +184,12 @@ export const createDirectShopContract = mutation({
     requireAdmin(args.adminSecret);
 
     if (args.ownerEmail) {
-      if (!isValidEmail(args.ownerEmail)) throw new Error("Inhaber E-Mail: bitte eine gültige E-Mail-Adresse angeben");
+      if (!isValidEmail(args.ownerEmail)) throw new ConvexError("Inhaber E-Mail: bitte eine gültige E-Mail-Adresse angeben");
       const dupe = await ctx.db
         .query("shopLeads")
         .withIndex("by_ownerEmail", q => q.eq("ownerEmail", args.ownerEmail!))
         .unique();
-      if (dupe) throw new Error("Ein Shop mit dieser Inhaber-E-Mail existiert bereits im Partnerprogramm");
+      if (dupe) throw new ConvexError("Ein Shop mit dieser Inhaber-E-Mail existiert bereits im Partnerprogramm");
     }
 
     const affiliate = await getOrCreateDirectAffiliate(ctx);
@@ -355,8 +355,8 @@ export const approveLead = mutation({
     requireAdmin(args.adminSecret);
 
     const lead = await ctx.db.get(args.leadId);
-    if (!lead) throw new Error("Lead nicht gefunden");
-    if (lead.status === "active") throw new Error("Shop ist bereits aktiv");
+    if (!lead) throw new ConvexError("Lead nicht gefunden");
+    if (lead.status === "active") throw new ConvexError("Shop ist bereits aktiv");
 
     // ShopContract anlegen
     await ctx.db.insert("shopContracts", {
@@ -424,8 +424,8 @@ export const recordPayment = mutation({
     requireAdmin(args.adminSecret);
 
     const contract = await ctx.db.get(args.shopContractId);
-    if (!contract)                        throw new Error("Vertrag nicht gefunden");
-    if (contract.status !== "active")     throw new Error("Vertrag ist nicht aktiv, keine Provision");
+    if (!contract)                        throw new ConvexError("Vertrag nicht gefunden");
+    if (contract.status !== "active")     throw new ConvexError("Vertrag ist nicht aktiv, keine Provision");
 
     const newPaymentCount = contract.paymentCount + 1;
 
@@ -436,7 +436,7 @@ export const recordPayment = mutation({
         q.eq("shopContractId", args.shopContractId).eq("paymentNumber", newPaymentCount)
       )
       .unique();
-    if (existing) throw new Error("Provision für diese Zahlung bereits erfasst");
+    if (existing) throw new ConvexError("Provision für diese Zahlung bereits erfasst");
 
     // Provisions-Regel berechnen
     const rule = resolveCommissionRule(contract.planType, newPaymentCount);
@@ -519,8 +519,8 @@ export const createPayout = mutation({
     let total = 0;
     for (const cId of args.commissionIds) {
       const c = await ctx.db.get(cId);
-      if (!c || c.status !== "confirmed") throw new Error(`Commission ${cId} ist nicht bestätigt`);
-      if (c.affiliateId !== args.affiliateId) throw new Error("Commission gehört nicht zu diesem Affiliate");
+      if (!c || c.status !== "confirmed") throw new ConvexError(`Commission ${cId} ist nicht bestätigt`);
+      if (c.affiliateId !== args.affiliateId) throw new ConvexError("Commission gehört nicht zu diesem Affiliate");
       total += c.amount;
     }
 
@@ -750,7 +750,7 @@ export const approveProfileChange = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
-    if (!a?.pendingProfile) throw new Error("Keine ausstehende Änderung");
+    if (!a?.pendingProfile) throw new ConvexError("Keine ausstehende Änderung");
     const { submittedAt: _s, ...fields } = a.pendingProfile;
     await ctx.db.patch(args.affiliateId, { ...fields, pendingProfile: undefined });
     await ctx.db.insert("auditLog", {
@@ -768,7 +768,7 @@ export const rejectProfileChange = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
-    if (!a?.pendingProfile) throw new Error("Keine ausstehende Änderung");
+    if (!a?.pendingProfile) throw new ConvexError("Keine ausstehende Änderung");
     await ctx.db.patch(args.affiliateId, { pendingProfile: undefined });
     await ctx.db.insert("auditLog", {
       entityType: "affiliate",
