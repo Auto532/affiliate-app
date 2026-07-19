@@ -17,7 +17,7 @@ function nextCommission(planType: "annual" | "monthly", paymentCount: number) {
       ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
       : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
   const rates: Record<string, number> = { initial: 0.20, year2: 0.05, year3: 0.10, year4_plus: 0.15 };
-  const base   = planType === "annual" ? 389 : 39;
+  const base   = planType === "annual" ? 360 : 30; // Provision nur auf den Abo-Anteil
   const amount = Math.round(base * rates[phase] * 100) / 100;
   return { amount, rate: rates[phase] };
 }
@@ -178,7 +178,7 @@ export default function ShopDetailPage() {
           <div className="flex items-center justify-between">
             <p className="text-sm text-[rgba(242,237,228,.6)]">Plan</p>
             <p className="text-sm font-semibold text-[#f2ede4]">
-              {contract.planType === "annual" ? "Jahresabo (€389)" : "Monatsabo (€39)"}
+              {contract.planType === "annual" ? "Jahresabo (€360)" : "Monatsabo (€30)"}
             </p>
           </div>
           <div className="flex items-center justify-between">

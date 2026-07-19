@@ -1,9 +1,8 @@
-import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
+﻿import { action, internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
-import { planPrice } from "./pricing";
+import { planPrice, rewardPrice, invoiceTotal, SETUP_FEE, applyDiscount } from "./pricing";
 import { lookupDiscount } from "./discounts";
 import { escapeHtml } from "./htmlEscape";
 
@@ -15,10 +14,7 @@ function commissionBase(): "paid" | "full" {
 
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? "";
 const STRIPE_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET ?? "";
-const PP_CLIENT_ID   = process.env.PAYPAL_CLIENT_ID   ?? "";
-const PP_SECRET      = process.env.PAYPAL_CLIENT_SECRET ?? "";
 const APP_URL        = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "http://localhost:3000";
-const PAYPAL_BASE    = "https://api-m.paypal.com";
 const TG_TOKEN       = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TG_CHAT_ID     = process.env.TELEGRAM_CHAT_ID   ?? "";
 
@@ -43,10 +39,16 @@ export const getByPaymentToken = query({
     if (!contract) return null;
     const lead = await ctx.db.get(contract.shopLeadId);
 
-    const normalPrice = planPrice(contract.planType);
-    // Zu zahlender Betrag der ERSTEN Periode (Jahr 1): rabattiert falls Rabatt gesetzt.
-    const payableAmount = contract.firstYearDiscount
-      ? (contract.discountedPrice ?? Math.round(normalPrice * (1 - contract.firstYearDiscount) * 100) / 100)
+    // Rechnungsbestandteile: Abo + Bonusprogramm (wiederkehrend) + Einrichtung
+    // inkl. Design (nur erste Rechnung). Rabatt (1. Jahr) gilt auf ALLES.
+    const rewardCount  = contract.rewardCount ?? 0;
+    const isFirst      = contract.paymentCount === 0;
+    const aboPrice     = planPrice(contract.planType);
+    const rewardsPrice = rewardPrice(contract.planType) * rewardCount;
+    const setupFee     = isFirst ? SETUP_FEE : 0;
+    const normalPrice  = aboPrice + rewardsPrice + setupFee;   // Listenbetrag dieser Rechnung
+    const payableAmount = (isFirst && contract.firstYearDiscount)
+      ? (contract.discountedPrice ?? applyDiscount(normalPrice, contract.firstYearDiscount))
       : normalPrice;
 
     return {
@@ -54,9 +56,15 @@ export const getByPaymentToken = query({
       planType:   contract.planType,
       shopName:   lead?.shopName ?? "Loatycard Shop",
       ownerName:  lead?.ownerName ?? "",
-      amount:     normalPrice,     // Listenpreis (Referenz)
-      payableAmount,               // tatsächlich zu zahlen (Jahr 1)
+      amount:     normalPrice,     // Listenbetrag dieser Rechnung (Referenz)
+      payableAmount,               // tatsächlich zu zahlen
       paymentCount: contract.paymentCount,
+      // Aufschlüsselung für die Zahlungsseite
+      aboPrice,
+      rewardCount,
+      rewardUnitPrice: rewardPrice(contract.planType),
+      rewardsPrice,
+      setupFee,
       // Rabatt-Status (nur Anzeige — verbindlich ist der Server)
       discountCode:      contract.discountCode ?? null,
       firstYearDiscount: contract.firstYearDiscount ?? null,
@@ -101,13 +109,21 @@ export const autoRecordPayment = internalMutation({
 
     const rule = resolveCommissionRule(contract.planType, newCount); // liefert phase + rate
 
-    // Tatsächlich eingenommener Betrag DIESER Zahlung.
+    // Tatsächlich eingenommener Betrag DIESER Zahlung:
+    // Abo + Bonusprogramm, bei Zahlung #1 zusätzlich Einrichtung inkl. Design.
     // Rabatt gilt nur für die erste Abrechnungsperiode (Zahlung #1); ab #2 Normalpreis.
-    const listPrice  = planPrice(contract.planType);
-    const isFirst    = newCount === 1;
-    const paidAmount = (isFirst && contract.firstYearDiscount)
-      ? (contract.discountedPrice ?? Math.round(listPrice * (1 - contract.firstYearDiscount) * 100) / 100)
-      : listPrice;
+    const rewardCount = contract.rewardCount ?? 0;
+    const isFirst     = newCount === 1;
+    const listTotal   = invoiceTotal(contract.planType, rewardCount, isFirst);
+    const paidAmount  = (isFirst && contract.firstYearDiscount)
+      ? (contract.discountedPrice ?? applyDiscount(listTotal, contract.firstYearDiscount))
+      : listTotal;
+
+    // Provisions-Basis ist NUR der Abo-Anteil (ohne Einrichtung & Bonusprogramm).
+    const aboList = planPrice(contract.planType);
+    const aboPaid = (isFirst && contract.firstYearDiscount)
+      ? applyDiscount(aboList, contract.firstYearDiscount)
+      : aboList;
 
     // Provisions-Rate: normal aus commissionEngine. Ein Rabattcode kann die Rate
     // der ERSTEN Zahlung einmalig überschreiben (z.B. LOYAL50 = 50%). Ab Zahlung #2
@@ -121,9 +137,10 @@ export const autoRecordPayment = internalMutation({
       if (override !== undefined) rate = override;
     }
 
-    // Provisions-Basis per Flag: "paid" (Default) = gezahlter Betrag, "full" = Listenpreis.
+    // Provisions-Basis per Flag: "paid" (Default) = gezahlter Abo-Anteil,
+    // "full" = Abo-Listenpreis. Einrichtung & Bonusprogramm sind provisionsfrei.
     // Immer aus echten Server-Werten, nie aus Client-Input.
-    const base = commissionBase() === "full" ? listPrice : paidAmount;
+    const base = commissionBase() === "full" ? aboList : aboPaid;
     let amount = Math.round(base * rate * 100) / 100;
 
     // Sicherung: Provision darf nie höher sein als der tatsächlich eingenommene Betrag
@@ -226,6 +243,7 @@ export const getLeadForContract = internalQuery({
       businessType:     lead.businessType,
       loatycardShopId:  lead.loatycardShopId,
       planType:         contract.planType,
+      rewardCount:      contract.rewardCount ?? 0,
     };
   },
 });
@@ -274,6 +292,7 @@ export const provisionShop = internalAction({
     });
 
     const planLabel  = lead.planType === "annual" ? `Jahresabo (€${planPrice("annual")})` : `Monatsabo (€${planPrice("monthly")})`;
+    const bonusLabel = lead.rewardCount > 0 ? `\n<b>Bonusprogramm:</b> ${lead.rewardCount} Belohnung(en)` : "";
     const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${escapeHtml(lead.ownerPhone)}`   : "";
     const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${escapeHtml(lead.city)}`            : "";
     const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${escapeHtml(lead.businessType)}` : "";
@@ -283,28 +302,12 @@ export const provisionShop = internalAction({
       `<b>Shop:</b> ${escapeHtml(lead.shopName)}\n` +
       `<b>Slug:</b> ${escapeHtml(slug)}\n` +
       `<b>Shop-ID:</b> <code>${shopId}</code>\n\n` +
-      `<b>Modell:</b> ${planLabel}\n\n` +
+      `<b>Modell:</b> ${planLabel}${bonusLabel}\n\n` +
       `👤 <b>Inhaber:</b> ${escapeHtml(lead.ownerName)}\n` +
       `✉️ <b>E-Mail:</b> ${escapeHtml(lead.ownerEmail)}` +
       phoneLine + cityLine + branchLine +
       `\n\n⚙️ Design &amp; Bonusprogramm einrichten nicht vergessen!`
     );
-  },
-});
-
-// ── Interne Query: erwarteter Zahlungsbetrag für einen Vertrag ────────────────
-
-export const getExpectedAmount = internalQuery({
-  args: { shopContractId: v.id("shopContracts") },
-  handler: async (ctx, args): Promise<{ amount: number } | null> => {
-    const contract = await ctx.db.get(args.shopContractId);
-    if (!contract) return null;
-    // Zu zahlen (Jahr 1): rabattierter Betrag falls gesetzt, sonst Listenpreis.
-    const normal = planPrice(contract.planType);
-    const amount = contract.firstYearDiscount
-      ? (contract.discountedPrice ?? Math.round(normal * (1 - contract.firstYearDiscount) * 100) / 100)
-      : normal;
-    return { amount };
   },
 });
 
@@ -322,6 +325,7 @@ export const getContractForDiscount = internalQuery({
     return {
       contractId:                contract._id,
       planType:                  contract.planType,
+      rewardCount:               contract.rewardCount ?? 0,
       paymentCount:              contract.paymentCount,
       affiliateDiscountEligible: affiliate?.discountEligible === true,
     };
@@ -362,8 +366,9 @@ export const applyDiscountCode = action({
     if (!discount)                       return { valid: false, reason: "Code ungültig" };
     if (!info.affiliateDiscountEligible) return { valid: false, reason: "Für diesen Vertrag nicht verfügbar" };
 
-    const normalPrice     = planPrice(info.planType);
-    const discountedPrice = Math.round(normalPrice * (1 - discount.firstYearDiscount) * 100) / 100;
+    // Rabatt gilt auf die komplette erste Rechnung: Abo + Bonusprogramm + Einrichtung.
+    const normalPrice     = invoiceTotal(info.planType, info.rewardCount, true);
+    const discountedPrice = applyDiscount(normalPrice, discount.firstYearDiscount);
 
     await ctx.runMutation(internal.payments.storeDiscount, {
       shopContractId:    info.contractId,
@@ -398,39 +403,86 @@ export const createStripeCheckout = action({
 
     const subscriptionMode = process.env.STRIPE_SUBSCRIPTION_MODE === "true";
     const planLabel = info.planType === "annual" ? "Jahresabo" : "Monatsabo";
+    const interval  = info.planType === "annual" ? ("year" as const) : ("month" as const);
 
-    const sessionParams: Parameters<typeof stripe.checkout.sessions.create>[0] = subscriptionMode
-      ? {
-          mode: "subscription",
-          payment_method_types: ["card", "sepa_debit"],
-          line_items: [{
-            price_data: {
-              currency: "eur",
-              product_data: { name: `Loatycard ${planLabel}`, description: info.shopName },
-              unit_amount: info.amount * 100,
-              recurring: { interval: info.planType === "annual" ? "year" : "month" },
-            },
-            quantity: 1,
-          }],
-          success_url: `${APP_URL}/pay/success?method=stripe`,
-          cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
-          metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
-        }
-      : {
-          mode: "payment",
-          payment_method_types: ["card", "sepa_debit"],
-          line_items: [{
-            price_data: {
-              currency: "eur",
-              product_data: { name: `Loatycard ${planLabel}`, description: info.shopName },
-              unit_amount: info.amount * 100,
-            },
-            quantity: 1,
-          }],
-          success_url: `${APP_URL}/pay/success?method=stripe`,
-          cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
-          metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
-        };
+    type CheckoutParams = NonNullable<Parameters<typeof stripe.checkout.sessions.create>[0]>;
+    let sessionParams: CheckoutParams;
+
+    if (subscriptionMode) {
+      // Wiederkehrende Positionen: Abo + Bonusprogramm. Einrichtung inkl. Design
+      // als einmalige Position — landet nur auf der ersten Rechnung.
+      const lineItems: NonNullable<CheckoutParams["line_items"]> = [{
+        price_data: {
+          currency: "eur",
+          product_data: { name: `Loatycard ${planLabel}`, description: info.shopName },
+          unit_amount: Math.round(info.aboPrice * 100),
+          recurring: { interval },
+        },
+        quantity: 1,
+      }];
+      if (info.rewardCount > 0) {
+        lineItems.push({
+          price_data: {
+            currency: "eur",
+            product_data: { name: `Bonusprogramm (${info.rewardCount} Belohnung${info.rewardCount === 1 ? "" : "en"})` },
+            unit_amount: Math.round(info.rewardUnitPrice * 100),
+            recurring: { interval },
+          },
+          quantity: info.rewardCount,
+        });
+      }
+      lineItems.push({
+        price_data: {
+          currency: "eur",
+          product_data: { name: "Einrichtung & individuelles Design (einmalig)" },
+          unit_amount: Math.round(SETUP_FEE * 100),
+        },
+        quantity: 1,
+      });
+
+      // Rabatt (nur erste Rechnung) als Coupon duration:"once" — ab der
+      // Verlängerung gilt automatisch der Normalpreis.
+      let discounts: { coupon: string }[] | undefined;
+      if (info.firstYearDiscount && info.paymentCount === 0) {
+        const coupon = await stripe.coupons.create({
+          percent_off: Math.round(info.firstYearDiscount * 100),
+          duration:    "once",
+          name:        info.discountCode ?? "Rabatt 1. Jahr",
+        });
+        discounts = [{ coupon: coupon.id }];
+      }
+
+      sessionParams = {
+        mode: "subscription",
+        payment_method_types: ["card", "sepa_debit"],
+        line_items: lineItems,
+        ...(discounts ? { discounts } : {}),
+        success_url: `${APP_URL}/pay/success?method=stripe`,
+        cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
+        metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
+      };
+    } else {
+      // Einmalzahlung (Pilot-Modus): tatsächlich zu zahlender Betrag inkl.
+      // Bonusprogramm + Einrichtung, Rabatt bereits abgezogen.
+      const parts = [`Loatycard ${planLabel}`];
+      if (info.rewardCount > 0) parts.push(`Bonusprogramm (${info.rewardCount})`);
+      if (info.setupFee > 0)    parts.push("Einrichtung & Design");
+      sessionParams = {
+        mode: "payment",
+        payment_method_types: ["card", "sepa_debit"],
+        line_items: [{
+          price_data: {
+            currency: "eur",
+            product_data: { name: parts.join(" + "), description: info.shopName },
+            unit_amount: Math.round(info.payableAmount * 100),
+          },
+          quantity: 1,
+        }],
+        success_url: `${APP_URL}/pay/success?method=stripe`,
+        cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
+        metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
+      };
+    }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
     return { url: session.url };
@@ -516,94 +568,3 @@ export const handleStripeWebhook = action({
   },
 });
 
-// ── PayPal: Hilfsfunktion Access-Token ───────────────────────────────────────
-
-async function getPayPalToken(): Promise<string> {
-  const creds = btoa(`${PP_CLIENT_ID}:${PP_SECRET}`);
-  const res   = await fetch(`${PAYPAL_BASE}/v1/oauth2/token`, {
-    method:  "POST",
-    headers: { Authorization: `Basic ${creds}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body:    "grant_type=client_credentials",
-  });
-  const data = await res.json();
-  return data.access_token;
-}
-
-// ── PayPal: Order erstellen ───────────────────────────────────────────────────
-
-export const createPayPalOrder = action({
-  args: { paymentToken: v.string() },
-  handler: async (ctx, args): Promise<{ orderId: string; contractId: Id<"shopContracts"> }> => {
-    const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
-    if (!info) throw new Error("Ungültiger Zahlungslink");
-
-    const token = await getPayPalToken();
-    const res   = await fetch(`${PAYPAL_BASE}/v2/checkout/orders`, {
-      method:  "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        intent: "CAPTURE",
-        purchase_units: [{
-          amount:      { currency_code: "EUR", value: info.amount.toFixed(2) },
-          description: `Loatycard ${info.planType === "annual" ? "Jahresabo" : "Monatsabo"} · ${info.shopName}`,
-          // Bindet die Order serverseitig an den Vertrag des Zahlungstokens.
-          // Beim Capture wird ausschließlich diese custom_id verwendet — der
-          // Client kann die Zahlung nicht auf einen fremden/teureren Vertrag umlenken.
-          custom_id:   info.contractId,
-        }],
-      }),
-    });
-
-    const order = await res.json();
-    return { orderId: order.id, contractId: info.contractId };
-  },
-});
-
-// ── PayPal: Order capturen ────────────────────────────────────────────────────
-
-export const capturePayPalOrder = action({
-  args: {
-    orderId: v.string(),
-  },
-  handler: async (ctx, args): Promise<{ status: string }> => {
-    const token = await getPayPalToken();
-    const res   = await fetch(`${PAYPAL_BASE}/v2/checkout/orders/${args.orderId}/capture`, {
-      method:  "POST",
-      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-    });
-
-    const capture = await res.json();
-    if (capture.status !== "COMPLETED") return { status: capture.status ?? "FAILED" };
-
-    // Vertrag ausschließlich aus der serverseitig gesetzten custom_id ableiten
-    // (nicht aus Client-Input) und den tatsächlich gecapturten Betrag prüfen.
-    const pu             = capture.purchase_units?.[0];
-    const contractId     = pu?.custom_id as string | undefined;
-    const capturedAmount = pu?.payments?.captures?.[0]?.amount?.value as string | undefined;
-    const captureId      = pu?.payments?.captures?.[0]?.id as string | undefined;
-    if (!contractId || !capturedAmount) {
-      throw new Error("Zahlung konnte keinem Vertrag zugeordnet werden");
-    }
-
-    const expected = await ctx.runQuery(internal.payments.getExpectedAmount, {
-      shopContractId: contractId as Id<"shopContracts">,
-    });
-    if (!expected) throw new Error("Vertrag nicht gefunden");
-    if (Number(capturedAmount) + 0.001 < expected.amount) {
-      throw new Error("Gezahlter Betrag entspricht nicht dem Vertragspreis");
-    }
-
-    const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
-      shopContractId: contractId as Id<"shopContracts">,
-      paymentRef:     captureId ?? args.orderId,
-      method:         "paypal",
-    });
-    if (result?.paymentNumber === 1) {
-      await ctx.runAction(internal.payments.provisionShop, {
-        shopContractId: contractId as Id<"shopContracts">,
-      });
-    }
-
-    return { status: "COMPLETED" };
-  },
-});

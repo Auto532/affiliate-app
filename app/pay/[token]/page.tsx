@@ -2,20 +2,16 @@
 
 import { useQuery, useAction } from "convex/react";
 import { api } from "@/convex/_generated/api";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import { useState } from "react";
-import { PayPalScriptProvider, PayPalButtons } from "@paypal/react-paypal-js";
 import TestPaymentButton from "./TestPaymentButton"; // ⚠️ TEST-ONLY — vor Live-Schaltung entfernen
 
 export default function PayPage() {
   const params = useParams();
-  const router = useRouter();
   const token  = params.token as string;
 
   const info                  = useQuery(api.payments.getByPaymentToken, { token });
   const createStripe          = useAction(api.payments.createStripeCheckout);
-  const createPayPalOrder     = useAction(api.payments.createPayPalOrder);
-  const capturePayPalOrder    = useAction(api.payments.capturePayPalOrder);
   const applyDiscount         = useAction(api.payments.applyDiscountCode);
 
   const [stripeLoading, setStripeLoading] = useState(false);
@@ -115,6 +111,35 @@ export default function PayPage() {
             )}
           </div>
         </div>
+
+        {/* Aufschlüsselung */}
+        <div className="space-y-1.5 pt-2 border-t border-[rgba(255,255,255,.06)]">
+          <div className="flex justify-between text-xs">
+            <span className="text-[rgba(242,237,228,.5)]">{planLabel}</span>
+            <span className="text-[rgba(242,237,228,.7)]">€{info.aboPrice}</span>
+          </div>
+          {info.rewardCount > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-[rgba(242,237,228,.5)]">
+                Bonusprogramm ({info.rewardCount} Belohnung{info.rewardCount === 1 ? "" : "en"})
+              </span>
+              <span className="text-[rgba(242,237,228,.7)]">€{info.rewardsPrice}</span>
+            </div>
+          )}
+          {info.setupFee > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-[rgba(242,237,228,.5)]">Einrichtung & individuelles Design (einmalig)</span>
+              <span className="text-[rgba(242,237,228,.7)]">€{info.setupFee}</span>
+            </div>
+          )}
+          {info.firstYearDiscount ? (
+            <div className="flex justify-between text-xs">
+              <span className="text-green-400">Rabatt {info.discountCode ?? ""} (−{Math.round(info.firstYearDiscount * 100)}%)</span>
+              <span className="text-green-400">−€{Math.round((info.normalPrice - info.payableAmount) * 100) / 100}</span>
+            </div>
+          ) : null}
+        </div>
+
         {info.firstYearDiscount && (
           <div className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold"
             style={{ background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.3)", color: "#4ade80" }}>
@@ -171,38 +196,6 @@ export default function PayPage() {
             </>
           )}
         </button>
-
-        <div className="flex items-center gap-3">
-          <div className="flex-1 h-px bg-[rgba(255,255,255,.06)]" />
-          <span className="text-[10px] text-[rgba(242,237,228,.25)]">oder</span>
-          <div className="flex-1 h-px bg-[rgba(255,255,255,.06)]" />
-        </div>
-
-        {/* PayPal */}
-        <div className="rounded-2xl overflow-hidden"
-          style={{ background: "#ffc439" }}>
-          <PayPalScriptProvider options={{
-            clientId: process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ?? "sb",
-            currency:  "EUR",
-          }}>
-            <div className="px-3 py-2">
-              <PayPalButtons
-                style={{ layout: "horizontal", color: "gold", shape: "rect", label: "pay", height: 48 }}
-                createOrder={async () => {
-                  const { orderId } = await createPayPalOrder({ paymentToken: token });
-                  return orderId;
-                }}
-                onApprove={async (data) => {
-                  // Vertrag + Betrag werden serverseitig aus der Order (custom_id)
-                  // abgeleitet und geprüft — kein contractId-Input vom Client mehr.
-                  await capturePayPalOrder({ orderId: data.orderID });
-                  router.replace("/pay/success?method=paypal");
-                }}
-                onError={() => setError("PayPal-Zahlung fehlgeschlagen")}
-              />
-            </div>
-          </PayPalScriptProvider>
-        </div>
       </div>
 
       {error && (

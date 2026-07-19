@@ -87,8 +87,10 @@ export default defineSchema({
     inviteExpiresAt:   v.optional(v.number()),   // Unix timestamp
     inviteAcceptedAt:  v.optional(v.number()),
 
-    wantsDesign:       v.optional(v.boolean()),
-    wantsBonusStamps:  v.optional(v.boolean()),
+    wantsDesign:       v.optional(v.boolean()),   // Legacy — Design ist jetzt immer inklusive (99 € Einrichtung)
+    wantsBonusStamps:  v.optional(v.boolean()),   // Legacy — abgelöst durch rewardCount
+    // Anzahl Bonus-Belohnungen (5 €/Monat pro Belohnung), bei Vertragsanlage gewählt
+    rewardCount:       v.optional(v.number()),
 
     rejectionReason:   v.optional(v.string()),
     adminNotes:        v.optional(v.string()),
@@ -122,6 +124,10 @@ export default defineSchema({
     paymentCount:  v.number(),
     canceledAt:    v.optional(v.number()),
     paymentToken:  v.optional(v.string()),
+
+    // Anzahl Bonus-Belohnungen: 5 €/Monat pro Belohnung auf jeder Rechnung
+    // (Jahresabo: 60 €/Jahr pro Belohnung). Fehlt = 0.
+    rewardCount:   v.optional(v.number()),
 
     // Direktvertrieb: Vertrag wurde vom Admin ohne Partner angelegt.
     // Zahlungen erzeugen weiterhin Commission-Rows (für den Umsatz in den
@@ -160,7 +166,7 @@ export default defineSchema({
     planType:        v.union(v.literal("annual"), v.literal("monthly")),
 
     rate:            v.number(),         // z.B. 0.20
-    baseAmount:      v.number(),         // z.B. 389.00
+    baseAmount:      v.number(),         // Abo-Anteil als Provisions-Basis, z.B. 360.00
     amount:          v.number(),         // berechnete Provision
 
     status:          v.union(

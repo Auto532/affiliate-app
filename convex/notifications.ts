@@ -28,6 +28,7 @@ export const notifyNewShopLead = internalAction({
     city:          v.optional(v.string()),
     businessType:  v.optional(v.string()),
     planType:      v.union(v.literal("annual"), v.literal("monthly")),
+    rewardCount:   v.optional(v.number()),
     affiliateName: v.string(),
     affiliateCode: v.optional(v.string()),
     viaInvite:     v.boolean(),
@@ -55,7 +56,9 @@ export const notifyNewShopLead = internalAction({
       line("📞", "Telefon", args.ownerPhone) +
       line("📍", "Stadt", args.city) +
       line("🏷", "Branche", args.businessType) +
-      `\n💳 <b>Modell:</b> ${planLabel}\n\n` +
+      `\n💳 <b>Modell:</b> ${planLabel}` +
+      (args.rewardCount ? `\n🎁 <b>Bonusprogramm:</b> ${args.rewardCount} Belohnung(en)` : "") +
+      `\n\n` +
       partnerBlock +
       `\n\n⏳ Wartet auf Zahlung.`
     );

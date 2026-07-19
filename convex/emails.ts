@@ -1,6 +1,6 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { PLAN_PRICES } from "./pricing";
+import { PLAN_PRICES, SETUP_FEE, REWARD_PRICE_PER_MONTH } from "./pricing";
 import { escapeHtml } from "./htmlEscape";
 
 const RESEND_KEY  = process.env.RESEND_API_KEY ?? "";
@@ -13,8 +13,7 @@ export const sendWelcomeEmail = internalAction({
     ownerName:        v.string(),
     shopName:         v.string(),
     planType:         v.union(v.literal("annual"), v.literal("monthly")),
-    wantsDesign:      v.optional(v.boolean()),
-    wantsBonusStamps: v.optional(v.boolean()),
+    rewardCount:      v.optional(v.number()),
   },
   handler: async (_ctx, args) => {
     if (!RESEND_KEY) return;
@@ -23,19 +22,21 @@ export const sendWelcomeEmail = internalAction({
       ? `Jahresabo (€${PLAN_PRICES.annual} / Jahr)`
       : `Monatsabo (€${PLAN_PRICES.monthly} / Monat)`;
 
+    const rewardCount = args.rewardCount ?? 0;
     const extras = [
-      args.wantsDesign      && "Custom Design",
-      args.wantsBonusStamps && "Bonus-Stempel (mehr als 10)",
-    ].filter(Boolean) as string[];
+      `Individuelles Design & Einrichtung (einmalig €${SETUP_FEE})`,
+      ...(rewardCount > 0
+        ? [`Bonusprogramm: ${rewardCount} Belohnung${rewardCount === 1 ? "" : "en"} (€${REWARD_PRICE_PER_MONTH}/Monat pro Belohnung)`]
+        : []),
+    ];
 
-    const extrasSection = extras.length
-      ? `
+    const extrasSection = `
         <tr><td style="padding:0 32px 24px 32px;">
           <table width="100%" cellpadding="0" cellspacing="0"
             style="background:#fffbef;border-radius:10px;border-left:4px solid #c9a227;">
             <tr><td style="padding:16px 20px;">
               <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#0d0c0a;text-transform:uppercase;letter-spacing:1px;">
-                Deine gewählten Extras
+                In deinem Paket enthalten
               </p>
               ${extras.map(e => `
               <p style="margin:6px 0;color:#444;font-size:14px;">
@@ -43,19 +44,16 @@ export const sendWelcomeEmail = internalAction({
               </p>`).join("")}
             </td></tr>
           </table>
-        </td></tr>`
-      : "";
+        </td></tr>`;
 
-    const designSection = args.wantsDesign
-      ? `
+    const designSection = `
         <tr><td style="padding:0 32px 24px 32px;">
           <p style="margin:0;color:#444;font-size:15px;line-height:1.7;">
-            Weil du ein <strong>Custom Design</strong> gewünscht hast, melden wir uns
-            <strong>innerhalb der nächsten 24 Stunden</strong> persönlich bei dir –
-            damit deine Stempelkarte genauso aussieht, wie du es dir vorstellst.
+            Zu deinem Paket gehört ein <strong>individuelles Design</strong> deiner
+            Stempelkarte. Wir melden uns <strong>innerhalb der nächsten 24 Stunden</strong>
+            persönlich bei dir – damit deine Karte genauso aussieht, wie du es dir vorstellst.
           </p>
-        </td></tr>`
-      : "";
+        </td></tr>`;
 
     const html = `
 <!DOCTYPE html>
@@ -188,7 +186,9 @@ export const sendWelcomeEmail = internalAction({
       `schnell und reibungslos an den Start geht.`,
       ``,
       `Dein Paket: ${planLabel}`,
-      ...(extras.length ? [``, `Deine gewählten Extras:`, ...extras.map(e => `- ${e}`)] : []),
+      ``,
+      `In deinem Paket enthalten:`,
+      ...extras.map(e => `- ${e}`),
       ``,
       `Bitte halte diese Angaben bereit:`,
       `- Impressum (Firmenname, Inhaber, Anschrift, Kontakt)`,

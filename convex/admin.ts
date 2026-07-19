@@ -173,6 +173,7 @@ export const createDirectShopContract = mutation({
     city:                v.optional(v.string()),
     businessType:        v.optional(v.string()),
     planType:            v.union(v.literal("annual"), v.literal("monthly")),
+    rewardCount:         v.optional(v.number()),
     loatycardShopId:     v.string(),
     loatycardShopSlug:   v.string(),
     loatycardAdminToken: v.optional(v.string()),
@@ -208,9 +209,11 @@ export const createDirectShopContract = mutation({
       loatycardShopId:     args.loatycardShopId,
       loatycardShopSlug:   args.loatycardShopSlug,
       loatycardAdminToken: args.loatycardAdminToken,
+      rewardCount:         Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0))),
     });
 
     const paymentToken = crypto.randomUUID();
+    const rewardCount  = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
     await ctx.db.insert("shopContracts", {
       shopLeadId:    leadId,
       affiliateId:   affiliate._id,
@@ -220,6 +223,7 @@ export const createDirectShopContract = mutation({
       paymentCount:  0,
       paymentToken,
       isDirect:      true,
+      rewardCount,
     });
 
     await ctx.db.insert("auditLog", {
@@ -340,6 +344,7 @@ export const approveLead = mutation({
     adminSecret:     v.string(),
     leadId:          v.id("shopLeads"),
     planType:        v.union(v.literal("annual"), v.literal("monthly")),
+    rewardCount:     v.optional(v.number()),
     loatycardShopId: v.optional(v.string()),
     adminName:       v.optional(v.string()),
   },
@@ -359,6 +364,7 @@ export const approveLead = mutation({
       status:        "active",
       paymentCount:  0,
       paymentToken:  crypto.randomUUID(),
+      rewardCount:   Math.max(0, Math.min(20, Math.round(args.rewardCount ?? lead.rewardCount ?? 0))),
     });
 
     await ctx.db.patch(args.leadId, {

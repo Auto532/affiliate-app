@@ -21,11 +21,10 @@ export default function NewShopPage() {
     shopName: "", ownerName: "", ownerEmail: "",
     ownerPhone: "", businessType: "", city: "",
   });
-  const [planType,         setPlanType]         = useState<"annual" | "monthly">("annual");
-  const [wantsDesign,      setWantsDesign]      = useState(false);
-  const [wantsBonusStamps, setWantsBonusStamps] = useState(false);
-  const [error, setError]                       = useState("");
-  const [loading, setLoading]                   = useState(false);
+  const [planType,    setPlanType]    = useState<"annual" | "monthly">("annual");
+  const [rewardCount, setRewardCount] = useState(0);
+  const [error, setError]             = useState("");
+  const [loading, setLoading]         = useState(false);
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -37,8 +36,7 @@ export default function NewShopPage() {
     try {
       const leadId = await submitLead({
         token, planType,
-        wantsDesign:      wantsDesign      || undefined,
-        wantsBonusStamps: wantsBonusStamps || undefined,
+        rewardCount: rewardCount || undefined,
         ...form,
         ownerPhone:   form.ownerPhone   || undefined,
         businessType: form.businessType || undefined,
@@ -84,8 +82,8 @@ export default function NewShopPage() {
           <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Vertragsmodell *</label>
           <div className="grid grid-cols-2 gap-2">
             {([
-              { id: "annual",  label: "Jahresabo",  price: "€389 / Jahr",  comm: "20% = €77,80" },
-              { id: "monthly", label: "Monatsabo",  price: "€39 / Monat",  comm: "20% = €7,80"  },
+              { id: "annual",  label: "Jahresabo",  price: "€360 / Jahr",  comm: "20% = €72" },
+              { id: "monthly", label: "Monatsabo",  price: "€30 / Monat",  comm: "20% = €6"  },
             ] as const).map(p => (
               <button key={p.id} type="button" onClick={() => setPlanType(p.id)}
                 className="rounded-xl p-3 text-left transition-colors"
@@ -100,37 +98,37 @@ export default function NewShopPage() {
           </div>
         </div>
 
-        {/* Extras */}
+        {/* Immer inklusive: Einrichtung + Design */}
+        <div className="rounded-xl p-3"
+          style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)" }}>
+          <p className="text-sm font-semibold text-[#f2ede4]">Einrichtung & individuelles Design</p>
+          <p className="text-[11px] text-[rgba(242,237,228,.5)] mt-0.5">
+            Einmalig €99 — bei jedem Shop automatisch dabei (eigenes Logo, eigene Farben).
+          </p>
+        </div>
+
+        {/* Bonusprogramm */}
         <div>
-          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Extras (optional)</label>
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              { state: wantsDesign,      set: setWantsDesign,      label: "Custom Design",        sub: "Individuelle Gestaltung" },
-              { state: wantsBonusStamps, set: setWantsBonusStamps, label: "Bonus-Stempel",        sub: "Mehr als 10 Stempel"     },
-            ] as const).map((opt, i) => (
-              <button key={i} type="button" onClick={() => opt.set((v: boolean) => !v)}
-                className="rounded-xl p-3 text-left transition-colors"
-                style={opt.state
-                  ? { background: "rgba(201,162,39,.12)", border: "1px solid rgba(201,162,39,.4)" }
-                  : { background: "#17150f",              border: "1px solid rgba(255,255,255,.08)" }}>
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0"
-                    style={opt.state
-                      ? { background: "#c9a227" }
-                      : { background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.15)" }}>
-                    {opt.state && (
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#0d0c0a" strokeWidth="3">
-                        <polyline points="20 6 9 17 4 12" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-[#f2ede4] leading-none">{opt.label}</p>
-                    <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">{opt.sub}</p>
-                  </div>
-                </div>
-              </button>
-            ))}
+          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">
+            Bonusprogramm — Anzahl Belohnungen (optional)
+          </label>
+          <div className="rounded-xl p-3 flex items-center justify-between"
+            style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
+            <div>
+              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Belohnung{rewardCount === 1 ? "" : "en"}</p>
+              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">
+                €5 / Monat pro Belohnung{planType === "annual" ? " (€60 / Jahr)" : ""}
+                {rewardCount > 0 && ` · gesamt ${planType === "annual" ? `€${rewardCount * 60} / Jahr` : `€${rewardCount * 5} / Monat`}`}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}
+                className="w-9 h-9 rounded-lg text-lg font-bold text-[#f2ede4]"
+                style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)" }}>−</button>
+              <button type="button" onClick={() => setRewardCount(c => Math.min(20, c + 1))}
+                className="w-9 h-9 rounded-lg text-lg font-bold text-[#0d0c0a]"
+                style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>+</button>
+            </div>
           </div>
         </div>
 

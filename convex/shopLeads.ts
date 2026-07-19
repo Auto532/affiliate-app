@@ -25,8 +25,7 @@ export const submitLead = mutation({
     businessType:     v.optional(v.string()),
     city:             v.optional(v.string()),
     planType:         v.union(v.literal("annual"), v.literal("monthly")),
-    wantsDesign:      v.optional(v.boolean()),
-    wantsBonusStamps: v.optional(v.boolean()),
+    rewardCount:      v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const affiliate = await requireAffiliate(ctx, args.token);
@@ -37,7 +36,8 @@ export const submitLead = mutation({
       .unique();
     if (existing) throw new Error("Ein Shop mit dieser E-Mail wurde bereits eingereicht");
 
-    const now = Date.now();
+    const now         = Date.now();
+    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
 
     const leadId = await ctx.db.insert("shopLeads", {
       affiliateId:      affiliate._id,
@@ -49,8 +49,7 @@ export const submitLead = mutation({
       city:             args.city,
       source:           "direct_form",
       status:           "pending_payment",
-      wantsDesign:      args.wantsDesign,
-      wantsBonusStamps: args.wantsBonusStamps,
+      rewardCount,
     });
 
     await ctx.db.insert("shopContracts", {
@@ -61,6 +60,7 @@ export const submitLead = mutation({
       status:        "active",
       paymentCount:  0,
       paymentToken:  crypto.randomUUID(),
+      rewardCount,
     });
 
     await ctx.db.insert("auditLog", {
@@ -73,12 +73,11 @@ export const submitLead = mutation({
     });
 
     await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
-      ownerEmail:       args.ownerEmail,
-      ownerName:        args.ownerName,
-      shopName:         args.shopName,
-      planType:         args.planType,
-      wantsDesign:      args.wantsDesign,
-      wantsBonusStamps: args.wantsBonusStamps,
+      ownerEmail:  args.ownerEmail,
+      ownerName:   args.ownerName,
+      shopName:    args.shopName,
+      planType:    args.planType,
+      rewardCount,
     });
 
     await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
@@ -89,6 +88,7 @@ export const submitLead = mutation({
       city:          args.city,
       businessType:  args.businessType,
       planType:      args.planType,
+      rewardCount,
       affiliateName: affiliate.name,
       affiliateCode: affiliate.referralCode,
       viaInvite:     false,
@@ -135,6 +135,7 @@ export const acceptInvite = mutation({
     businessType: v.optional(v.string()),
     city:         v.optional(v.string()),
     planType:     v.optional(v.union(v.literal("annual"), v.literal("monthly"))),
+    rewardCount:  v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const lead = await ctx.db
@@ -153,8 +154,9 @@ export const acceptInvite = mutation({
       .unique();
     if (existing && existing._id !== lead._id) throw new Error("Diese E-Mail ist bereits registriert");
 
-    const now      = Date.now();
-    const planType = args.planType ?? "annual";
+    const now         = Date.now();
+    const planType    = args.planType ?? "annual";
+    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
 
     await ctx.db.patch(lead._id, {
       shopName:         args.shopName,
@@ -165,6 +167,7 @@ export const acceptInvite = mutation({
       city:             args.city,
       status:           "pending_payment",
       inviteAcceptedAt: now,
+      rewardCount,
     });
 
     await ctx.db.insert("shopContracts", {
@@ -175,6 +178,7 @@ export const acceptInvite = mutation({
       status:        "active",
       paymentCount:  0,
       paymentToken:  crypto.randomUUID(),
+      rewardCount,
     });
 
     await ctx.db.insert("auditLog", {
@@ -194,6 +198,7 @@ export const acceptInvite = mutation({
       city:          args.city,
       businessType:  args.businessType,
       planType,
+      rewardCount,
       affiliateName: inviteAffiliate?.name ?? "—",
       affiliateCode: inviteAffiliate?.referralCode,
       viaInvite:     true,

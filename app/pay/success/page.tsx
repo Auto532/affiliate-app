@@ -8,7 +8,7 @@ function SuccessContent() {
   const method = params.get("method");
 
   // Test-Zahlung (Admin): nach 1 Sekunde zurück zur Admin-Übersicht, sonst
-  // hängt man auf dieser Seite fest. Echte Zahlungen (Stripe/PayPal) bleiben
+  // hängt man auf dieser Seite fest. Echte Zahlungen (Stripe) bleiben
   // hier — Shop-Inhaber sollen nicht im Admin-Panel landen.
   useEffect(() => {
     if (method !== "test") return;
@@ -32,12 +32,7 @@ function SuccessContent() {
           <p className="text-sm text-[rgba(242,237,228,.5)] mt-2">
             {method === "test"
               ? "Test-Zahlung erfasst. Du wirst zur Übersicht weitergeleitet…"
-              : <>
-                  {method === "paypal"
-                    ? "Deine PayPal-Zahlung wurde bestätigt."
-                    : "Deine Kartenzahlung wurde bestätigt."}
-                  {" "}Deine Loatycard-Stempelkarte wird in Kürze eingerichtet.
-                </>}
+              : "Deine Zahlung wurde bestätigt. Deine Loatycard-Stempelkarte wird in Kürze eingerichtet."}
           </p>
         </div>
       </div>

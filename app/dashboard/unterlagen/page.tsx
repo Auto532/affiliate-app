@@ -107,8 +107,8 @@ const SECTIONS: Section[] = [
         <p className="text-center text-[10px] font-mono text-[rgba(242,237,228,.35)] break-all">{DEMO_URL}</p>
         <P>
           Der Moment dafür: direkt nach dem Pitch. <b>„Scannen Sie mal — genau das sehen Ihre
-          Kunden."</b> Ab da verkauft sich das Produkt selbst, und der Design-Umschalter ist die
-          perfekte Überleitung zum Custom Design für 99 €.
+          Kunden."</b> Ab da verkauft sich das Produkt selbst, und der Design-Umschalter zeigt
+          direkt, wie das eigene Design aussehen wird — bei jedem Shop inklusive.
         </P>
       </div>
     ),
@@ -134,9 +134,10 @@ const SECTIONS: Section[] = [
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-2">
           {[
-            { name: "Jahresabo",     preis: "389 € / Jahr",  detail: "≈ 1,07 € pro Tag. Das Hauptprodukt — digitale Stempelkarte, QR-Scanner, Kunden-Statistiken, Bonus-Stufen & Meilensteine, Einrichtung inklusive." },
-            { name: "Monatsabo",     preis: "39 € / Monat",  detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
-            { name: "Custom Design", preis: "99 € einmalig", detail: "Eigenes Logo, eigene Farben, eigener Look der Kundenkarte. Starkes Upsell direkt beim Abschluss: ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
+            { name: "Jahresabo",               preis: "360 € / Jahr",   detail: "Nicht mal 1 € pro Tag. Das Hauptprodukt — digitale Stempelkarte, QR-Scanner, Kunden-Statistiken." },
+            { name: "Monatsabo",               preis: "30 € / Monat",   detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
+            { name: "Einrichtung & Design",    preis: "99 € einmalig",  detail: "Bei jedem Shop dabei (Pflichtbestandteil): komplette Einrichtung plus individuelles Design — eigenes Logo, eigene Farben, eigener Look. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
+            { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat — beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt." },
           ].map(p => (
             <div key={p.name} className="rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
               <div className="flex items-baseline justify-between gap-2">
@@ -189,7 +190,7 @@ const SECTIONS: Section[] = [
         <Einwand e="Was ist mit Datenschutz?"
           a="Es werden nur Name und Telefonnummer der Kunden gespeichert, mit Einwilligung, DSGVO-konform, Daten liegen auf Servern in der EU." />
         <Einwand e="Ich überlege es mir."
-          a="Klar. Zwei Angebote: das Monatsabo für 39 € als unverbindlicher Einstieg — oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
+          a="Klar. Zwei Angebote: das Monatsabo für 30 € als unverbindlicher Einstieg — oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
       </div>
     ),
   },
@@ -197,11 +198,11 @@ const SECTIONS: Section[] = [
     id: "designs", title: "Design-Beispiele zum Zeigen", icon: "🎨",
     body: (
       <div className="space-y-3">
-        <P>Zeig diese Beispiele im Gespräch — echte Designs von Loatycard-Shops und Vorlagen. Der Satz dazu: <b>„So individuell kann Ihre Karte aussehen — mit Ihrem Logo und Ihren Farben, für einmalig 99 €."</b></P>
+        <P>Zeig diese Beispiele im Gespräch — echte Designs von Loatycard-Shops und Vorlagen. Der Satz dazu: <b>„So sieht Ihre Karte aus — mit Ihrem Logo und Ihren Farben. Das individuelle Design ist bei jedem Shop dabei."</b></P>
         <div className="grid grid-cols-2 gap-2">
           {DESIGN_EXAMPLES.map(d => <MiniCard key={d.name} d={d} />)}
         </div>
-        <P>Jeder Shop ohne Custom Design bekommt den eleganten Standard-Look (dunkel mit Gold-Akzent) — auch der kann sich sehen lassen.</P>
+        <P>Jeder Shop bekommt sein eigenes Design — Teil der einmaligen Einrichtung (99 €). Es gibt keine Shops „von der Stange" mehr.</P>
       </div>
     ),
   },
@@ -235,7 +236,7 @@ const SECTIONS: Section[] = [
         {[
           { n: 1, t: "Shop einreichen", d: "Über ‚Neuen Shop einreichen' das Formular ausfüllen — oder dem Inhaber deinen Einladungslink geben, dann füllt er es selbst aus." },
           { n: 2, t: "Bestätigung", d: "Der Inhaber bekommt automatisch eine Bestätigungs-E-Mail. Du siehst den Shop sofort unter ‚Meine Shops'." },
-          { n: 3, t: "Zahlung", d: "Der Inhaber zahlt über den Zahlungslink (Karte, PayPal). Den Link findest du beim Shop unter ‚Meine Shops'." },
+          { n: 3, t: "Zahlung", d: "Der Inhaber zahlt über den Zahlungslink (Karte oder SEPA). Den Link findest du beim Shop unter ‚Meine Shops'." },
           { n: 4, t: "Automatische Einrichtung", d: "Direkt nach der Zahlung wird die Stempelkarte automatisch angelegt. Der Inhaber erhält QR-Code und Zugang." },
           { n: 5, t: "Deine Provision", d: "Erscheint sofort unter ‚Provisionen' und wird nach Bestätigung per SEPA ausgezahlt." },
         ].map(s => (

@@ -9,7 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@paypal/react-paypal-js": "^10.1.2",
     "convex": "^1.42.1",
     "framer-motion": "^12.42.2",
     "lucide-react": "^1.24.0",

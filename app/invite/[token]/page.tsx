@@ -15,6 +15,7 @@ export default function InvitePage() {
     shopName: "", ownerName: "", ownerEmail: "",
     ownerPhone: "", businessType: "", city: "",
   });
+  const [rewardCount, setRewardCount] = useState(0);
   const [done, setDone]       = useState(false);
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
@@ -34,6 +35,7 @@ export default function InvitePage() {
         ownerPhone:   form.ownerPhone   || undefined,
         businessType: form.businessType || undefined,
         city:         form.city         || undefined,
+        rewardCount:  rewardCount || undefined,
       });
       setDone(true);
     } catch (err: any) {
@@ -110,6 +112,28 @@ export default function InvitePage() {
             />
           </div>
         ))}
+
+        {/* Bonusprogramm (optional) */}
+        <div>
+          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-1.5">
+            Bonusprogramm — Anzahl Belohnungen (optional)
+          </label>
+          <div className="rounded-xl p-3 flex items-center justify-between"
+            style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
+            <div>
+              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Belohnung{rewardCount === 1 ? "" : "en"}</p>
+              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">5 € / Monat pro Belohnung</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}
+                className="w-9 h-9 rounded-lg text-lg font-bold text-[#f2ede4]"
+                style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)" }}>−</button>
+              <button type="button" onClick={() => setRewardCount(c => Math.min(20, c + 1))}
+                className="w-9 h-9 rounded-lg text-lg font-bold text-[#0d0c0a]"
+                style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>+</button>
+            </div>
+          </div>
+        </div>
 
         {error && (
           <div className="rounded-xl px-4 py-3 text-sm text-red-400"
