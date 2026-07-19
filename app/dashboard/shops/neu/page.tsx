@@ -72,7 +72,7 @@ export default function NewShopPage() {
       {/* Info-Banner */}
       <div className="rounded-xl px-4 py-3 text-sm text-[rgba(242,237,228,.6)]"
         style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)", borderLeft: "3px solid #c9a227" }}>
-        Der Shop wird sofort aktiv — deine Provision startet ab der ersten Zahlung.
+        Der Shop wird sofort aktiv, deine Provision startet ab der ersten Zahlung.
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -103,14 +103,14 @@ export default function NewShopPage() {
           style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)" }}>
           <p className="text-sm font-semibold text-[#f2ede4]">Einrichtung & individuelles Design</p>
           <p className="text-[11px] text-[rgba(242,237,228,.5)] mt-0.5">
-            Einmalig €99 — bei jedem Shop automatisch dabei (eigenes Logo, eigene Farben).
+            Einmalig €99, bei jedem Shop automatisch dabei (eigenes Logo, eigene Farben).
           </p>
         </div>
 
         {/* Bonusprogramm */}
         <div>
           <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">
-            Bonusprogramm — Anzahl Belohnungen (optional)
+            Bonusprogramm: Anzahl Belohnungen (optional)
           </label>
           <div className="rounded-xl p-3 flex items-center justify-between"
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>

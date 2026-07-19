@@ -103,7 +103,7 @@ export default function PartnerInvitePage() {
       <div className="text-center space-y-1">
         <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard Wallet</div>
         <h1 className="text-2xl font-bold text-[#f2ede4]">Partner werden</h1>
-        <p className="text-sm text-[rgba(242,237,228,.5)]">Füll deine Daten aus — du wirst danach freigeschaltet.</p>
+        <p className="text-sm text-[rgba(242,237,228,.5)]">Füll deine Daten aus, du wirst danach freigeschaltet.</p>
       </div>
 
       {/* Section Tabs */}

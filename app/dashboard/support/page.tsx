@@ -66,13 +66,13 @@ export default function SupportPage() {
       ) : (
         <div className="rounded-2xl p-4 space-y-3" style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.06)" }}>
           <p className="text-xs text-[rgba(242,237,228,.5)]">
-            Problem, Frage oder Feedback? Schreib uns — die Nachricht geht direkt ans Loatycard-Team.
+            Problem, Frage oder Feedback? Schreib uns, die Nachricht geht direkt ans Loatycard-Team.
           </p>
           <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={5}
             placeholder="Beschreibe dein Anliegen…"
             className="w-full px-4 py-3 bg-[#0d0c0a] border border-[rgba(255,255,255,.08)] rounded-xl text-[#f2ede4] placeholder-[rgba(242,237,228,.3)] focus:outline-none focus:border-[rgba(201,162,39,.4)] text-sm resize-none" />
           <input value={contact} onChange={e => setContact(e.target.value)}
-            placeholder="Rückruf-Nummer (optional — sonst antworten wir per E-Mail)"
+            placeholder="Rückruf-Nummer (optional, sonst antworten wir per E-Mail)"
             className="w-full px-4 py-3 bg-[#0d0c0a] border border-[rgba(255,255,255,.08)] rounded-xl text-[#f2ede4] placeholder-[rgba(242,237,228,.3)] focus:outline-none focus:border-[rgba(201,162,39,.4)] text-sm" />
           {err && <p className="text-xs text-red-400">{err}</p>}
           <button onClick={send} disabled={sending || !msg.trim()}
@@ -151,7 +151,7 @@ export default function SupportPage() {
                   </button>
                 </div>
               ) : (
-                <p className="text-[10px] text-[rgba(242,237,228,.35)]">Ticket abgeschlossen — bei neuem Anliegen einfach oben eine neue Anfrage senden.</p>
+                <p className="text-[10px] text-[rgba(242,237,228,.35)]">Ticket abgeschlossen. Bei neuem Anliegen einfach oben eine neue Anfrage senden.</p>
               )}
             </div>
             );

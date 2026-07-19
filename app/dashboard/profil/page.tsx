@@ -113,7 +113,7 @@ export default function ProfilePage() {
         <div className="rounded-2xl px-4 py-3" style={{ background: "rgba(251,191,36,.08)", border: "1px solid rgba(251,191,36,.25)" }}>
           <p className="text-xs font-semibold text-yellow-400">Warten auf Freigabe</p>
           <p className="text-[11px] text-[rgba(242,237,228,.6)] mt-1">
-            {pendingKeys.map(k => LABELS[k]).join(", ")} — sichtbar wird die Änderung, sobald wir sie freigegeben haben.
+            {pendingKeys.map(k => LABELS[k]).join(", ")} Sichtbar wird die Änderung, sobald wir sie freigegeben haben.
           </p>
         </div>
       )}

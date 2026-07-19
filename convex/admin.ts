@@ -422,7 +422,7 @@ export const recordPayment = mutation({
 
     const contract = await ctx.db.get(args.shopContractId);
     if (!contract)                        throw new Error("Vertrag nicht gefunden");
-    if (contract.status !== "active")     throw new Error("Vertrag ist nicht aktiv — keine Provision");
+    if (contract.status !== "active")     throw new Error("Vertrag ist nicht aktiv, keine Provision");
 
     const newPaymentCount = contract.paymentCount + 1;
 

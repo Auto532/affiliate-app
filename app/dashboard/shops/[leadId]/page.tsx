@@ -108,7 +108,7 @@ export default function ShopDetailPage() {
           <div>
             <p className="text-xs font-semibold text-[#c9a227] mb-1">Zahlungslink für den Inhaber</p>
             <p className="text-[11px] text-[rgba(242,237,228,.4)]">
-              Schick diesen Link an {lead.ownerName} — er zahlt direkt online.
+              Schick diesen Link an {lead.ownerName}, er zahlt direkt online.
             </p>
           </div>
           <div className="rounded-xl px-3 py-2.5 flex items-center gap-2"
@@ -138,7 +138,7 @@ export default function ShopDetailPage() {
           <Link href="/dashboard/shops"
             className="block w-full py-2.5 rounded-xl text-xs font-semibold text-center mt-1"
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)", color: "rgba(242,237,228,.4)" }}>
-            Kunde zahlt später — zur Übersicht
+            Kunde zahlt später, zur Übersicht
           </Link>
 
           {showQR && (
@@ -147,7 +147,7 @@ export default function ShopDetailPage() {
                 <QRCode value={payLink} size={180} />
               </div>
               <p className="text-[10px] text-[rgba(242,237,228,.3)] text-center">
-                Kamera draufhalten — öffnet den Zahlungslink direkt
+                Kamera draufhalten, öffnet den Zahlungslink direkt
               </p>
             </div>
           )}

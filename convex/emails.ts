@@ -51,7 +51,7 @@ export const sendWelcomeEmail = internalAction({
           <p style="margin:0;color:#444;font-size:15px;line-height:1.7;">
             Zu deinem Paket gehört ein <strong>individuelles Design</strong> deiner
             Stempelkarte. Wir melden uns <strong>innerhalb der nächsten 24 Stunden</strong>
-            persönlich bei dir – damit deine Karte genauso aussieht, wie du es dir vorstellst.
+            persönlich bei dir, damit deine Karte genauso aussieht, wie du es dir vorstellst.
           </p>
         </td></tr>`;
 
@@ -125,7 +125,7 @@ export const sendWelcomeEmail = internalAction({
             </p>
             <p style="margin:12px 0 0 0;color:#888;font-size:13px;line-height:1.6;">
               Diese Angaben brauchen wir, damit deine Stempelkarte rechtlich sauber
-              online gehen kann. Kein Stress &ndash; wir gehen alles gemeinsam mit dir durch.
+              online gehen kann. Kein Stress, wir gehen alles gemeinsam mit dir durch.
             </p>
           </td></tr>
         </table>
@@ -136,8 +136,8 @@ export const sendWelcomeEmail = internalAction({
     <tr>
       <td style="padding:0 32px 28px 32px;">
         <p style="margin:0 0 14px 0;font-size:15px;color:#555;line-height:1.75;">
-          In der Zwischenzeit stehen wir dir bei allen Fragen zur Seite –
-          einfach per WhatsApp oder Anruf direkt bei uns melden:
+          In der Zwischenzeit stehen wir dir bei allen Fragen zur Seite.
+          Melde dich einfach per WhatsApp oder ruf direkt bei uns an:
         </p>
         <a href="https://wa.me/${WHATSAPP_NR.replace(/\D/g, "")}"
           style="display:inline-block;background:#25d366;color:#ffffff;padding:14px 28px;border-radius:12px;
@@ -154,8 +154,8 @@ export const sendWelcomeEmail = internalAction({
     <tr>
       <td style="padding:0 32px 32px 32px;border-top:1px solid #f0ede8;">
         <p style="margin:24px 0 0 0;color:#555;font-size:15px;line-height:1.75;">
-          Wir freuen uns darauf, gemeinsam mit dir mehr Stammkunden zu gewinnen –
-          danke für dein Vertrauen!
+          Wir freuen uns darauf, gemeinsam mit dir mehr Stammkunden zu gewinnen.
+          Danke für dein Vertrauen!
         </p>
         <p style="margin:16px 0 0 0;color:#0d0c0a;font-size:15px;font-weight:600;">
           Dein Loatycard-Team
@@ -212,7 +212,7 @@ export const sendWelcomeEmail = internalAction({
       body: JSON.stringify({
         from:    FROM_EMAIL,
         to:      [args.ownerEmail],
-        subject: `Willkommen bei Loatycard – ${args.shopName} ist registriert`,
+        subject: `Willkommen bei Loatycard! ${args.shopName} ist registriert`,
         html,
         text,
       }),

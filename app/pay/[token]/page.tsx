@@ -27,7 +27,7 @@ export default function PayPage() {
       // Nur der eingetippte String geht raus — der Server entscheidet über den Rabatt.
       const res = await applyDiscount({ paymentToken: token, code });
       if (res.valid) {
-        setDiscountMsg({ ok: true, text: `${res.label} aktiviert — du zahlst €${res.discountedPrice} statt €${res.normalPrice}.` });
+        setDiscountMsg({ ok: true, text: `${res.label} aktiviert, du zahlst €${res.discountedPrice} statt €${res.normalPrice}.` });
       } else {
         setDiscountMsg({ ok: false, text: res.reason ?? "Code ungültig" });
       }

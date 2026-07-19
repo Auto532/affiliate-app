@@ -76,7 +76,7 @@ export default function InvitePage() {
         <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">Loatycard Wallet</div>
         <h1 className="text-2xl font-bold text-[#f2ede4]">Du wurdest eingeladen</h1>
         <p className="text-sm text-[rgba(242,237,228,.5)]">
-          Füll deine Shop-Daten aus — wir kümmern uns um den Rest.
+          Füll deine Shop-Daten aus, wir kümmern uns um den Rest.
         </p>
       </div>
 
@@ -85,7 +85,7 @@ export default function InvitePage() {
         style={{ background: "#17150f", border: "1px solid rgba(201,162,39,.2)", borderLeft: "3px solid #c9a227" }}>
         <p className="text-sm font-semibold text-[#f2ede4]">Was ist Loatycard Wallet?</p>
         <p className="text-xs text-[rgba(242,237,228,.5)] leading-relaxed">
-          Digitale Stempelkarten für dein Geschäft — ohne App, ohne Plastikkarten.
+          Digitale Stempelkarten für dein Geschäft, ohne App und ohne Plastikkarten.
           Deine Kunden sammeln Stempel per QR-Code und du bindest sie langfristig.
         </p>
       </div>
@@ -116,7 +116,7 @@ export default function InvitePage() {
         {/* Bonusprogramm (optional) */}
         <div>
           <label className="block text-xs text-[rgba(242,237,228,.5)] mb-1.5">
-            Bonusprogramm — Anzahl Belohnungen (optional)
+            Bonusprogramm: Anzahl Belohnungen (optional)
           </label>
           <div className="rounded-xl p-3 flex items-center justify-between"
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
