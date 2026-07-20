@@ -334,14 +334,21 @@ export const sendPaymentConfirmationEmail = internalAction({
               <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Impressum (Firmenname, Inhaber, Anschrift, Kontakt)
             </p>
             <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Umsatzsteuer-ID bzw. Steuernummer
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Handelsregisternummer &amp; Registergericht (falls eingetragen)
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
               <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; AGB deines Shops (falls vorhanden)
             </p>
             <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
               <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Datenschutzerkl&auml;rung bzw. Datenschutz-Kontakt
             </p>
             <p style="margin:12px 0 0 0;color:#8a8577;font-size:13px;line-height:1.6;">
-              Diese Angaben brauchen wir, damit deine Stempelkarte rechtlich sauber
-              online gehen kann. Kein Stress, wir gehen alles gemeinsam mit dir durch.
+              Diese Angaben brauchen wir für das Impressum, damit deine Stempelkarte
+              rechtlich sauber online gehen kann. Kein Stress, wir gehen alles
+              gemeinsam mit dir durch.
             </p>
           </td></tr>
         </table>
@@ -495,8 +502,10 @@ export const sendPaymentConfirmationEmail = internalAction({
         `Zu deinem Paket gehört ein individuelles Design deiner Stempelkarte.`,
         `Wir melden uns innerhalb der nächsten 24 Stunden persönlich bei dir.`,
         ``,
-        `Bitte halte diese Angaben bereit:`,
+        `Bitte halte diese Angaben bereit (für das Impressum):`,
         `- Impressum (Firmenname, Inhaber, Anschrift, Kontakt)`,
+        `- Umsatzsteuer-ID bzw. Steuernummer`,
+        `- Handelsregisternummer & Registergericht (falls eingetragen)`,
         `- AGB deines Shops (falls vorhanden)`,
         `- Datenschutzerklärung bzw. Datenschutz-Kontakt`,
         ``,
