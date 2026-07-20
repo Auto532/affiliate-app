@@ -183,13 +183,10 @@ export const createDirectShopContract = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
 
-    if (args.ownerEmail) {
-      if (!isValidEmail(args.ownerEmail)) throw new ConvexError("Inhaber E-Mail: bitte eine gültige E-Mail-Adresse angeben");
-      const dupe = await ctx.db
-        .query("shopLeads")
-        .withIndex("by_ownerEmail", q => q.eq("ownerEmail", args.ownerEmail!))
-        .unique();
-      if (dupe) throw new ConvexError("Ein Shop mit dieser Inhaber-E-Mail existiert bereits im Partnerprogramm");
+    // Gleiche Inhaber-E-Mail für mehrere Shops ist erlaubt (ein Inhaber kann
+    // mehrere Läden haben) — eindeutig sein müssen nur Endkunden pro Shop.
+    if (args.ownerEmail && !isValidEmail(args.ownerEmail)) {
+      throw new ConvexError("Inhaber E-Mail: bitte eine gültige E-Mail-Adresse angeben");
     }
 
     const affiliate = await getOrCreateDirectAffiliate(ctx);
@@ -733,6 +730,30 @@ export const getContractForShop = query({
     if (!contract) return null;
 
     const rewardCount = contract.rewardCount ?? 0;
+
+    // Zahlungshistorie für die Vertragskarte im Admin: Abschluss = Zahlung #1,
+    // Verlängerung = letzte Zahlung + Abrechnungsperiode. Jede Zahlung legt
+    // eine commissions-Row an (auch Direktvertrieb mit Rate 0).
+    const payments = (await ctx.db
+      .query("commissions")
+      .withIndex("by_contract_payment", q => q.eq("shopContractId", contract._id))
+      .collect()).sort((a, b) => a.paymentNumber - b.paymentNumber);
+    const firstPaidAt = payments[0]?.triggeredAt ?? null;
+    const lastPaid    = payments[payments.length - 1] ?? null;
+    let nextRenewalAt: number | null = null;
+    if (lastPaid) {
+      const d = new Date(lastPaid.triggeredAt);
+      if (contract.planType === "annual") d.setFullYear(d.getFullYear() + 1);
+      else                                d.setMonth(d.getMonth() + 1);
+      nextRenewalAt = d.getTime();
+    }
+
+    const amountDue = contract.paymentCount === 0
+      ? (contract.firstYearDiscount
+          ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
+          : invoiceTotal(contract.planType, rewardCount, true))
+      : 0;
+
     return {
       contractId:        contract._id,
       leadId:            lead._id,
@@ -746,6 +767,14 @@ export const getContractForShop = query({
       setupFee:          setupFee(!!contract.discountCode),
       discountCode:      contract.discountCode ?? null,
       firstYearDiscount: contract.firstYearDiscount ?? null,
+      // Zahlungsstatus + Historie für die Vertragskarte
+      paymentToken:      contract.paymentToken ?? "",
+      payLaterAt:        contract.payLaterAt ?? null,
+      contractStart:     contract.contractStart,
+      amountDue,
+      firstPaidAt,
+      lastPaidAt:        lastPaid?.triggeredAt ?? null,
+      nextRenewalAt,
     };
   },
 });

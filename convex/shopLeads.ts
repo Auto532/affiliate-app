@@ -35,12 +35,8 @@ export const submitLead = mutation({
     const ownerName  = requireFilled(args.ownerName, "Inhaber-Name");
     const ownerEmail = requireValidEmail(args.ownerEmail, "Inhaber E-Mail");
 
-    const existing = await ctx.db
-      .query("shopLeads")
-      .withIndex("by_ownerEmail", q => q.eq("ownerEmail", ownerEmail))
-      .unique();
-    if (existing) throw new ConvexError("Ein Shop mit dieser E-Mail wurde bereits eingereicht");
-
+    // Gleiche Inhaber-E-Mail für mehrere Shops ist erlaubt (ein Inhaber kann
+    // mehrere Läden haben) — eindeutig sein müssen nur Endkunden pro Shop.
     const now         = Date.now();
     const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
 
@@ -151,12 +147,7 @@ export const acceptInvite = mutation({
     const ownerName  = requireFilled(args.ownerName, "Name");
     const ownerEmail = requireValidEmail(args.ownerEmail);
 
-    const existing = await ctx.db
-      .query("shopLeads")
-      .withIndex("by_ownerEmail", q => q.eq("ownerEmail", ownerEmail))
-      .unique();
-    if (existing && existing._id !== lead._id) throw new ConvexError("Diese E-Mail ist bereits registriert");
-
+    // Gleiche Inhaber-E-Mail für mehrere Shops ist erlaubt, siehe submitLead.
     const now         = Date.now();
     const planType    = args.planType ?? "annual";
     const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
