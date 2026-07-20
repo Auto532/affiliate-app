@@ -104,7 +104,6 @@ export default defineSchema({
     loatycardAdminToken:   v.optional(v.string()),
   })
     .index("by_affiliate",   ["affiliateId"])
-    .index("by_ownerEmail",  ["ownerEmail"])
     .index("by_status",      ["status"])
     .index("by_inviteToken", ["inviteToken"]),
 

@@ -1,6 +1,7 @@
-﻿import { action, internalAction, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+﻿import { action, internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
 import { planPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, SETUP_FEE, applyDiscount } from "./pricing";
 import { lookupDiscount } from "./discounts";
@@ -127,15 +128,24 @@ export const requestPayLater = mutation({
   },
 });
 
-// ── Interne Mutation: Zahlung automatisch erfassen ────────────────────────────
+// ── Zahlung erfassen (gemeinsamer Kern) ───────────────────────────────────────
+// EINZIGER Pfad für alle Zahlungseingänge: Stripe-Webhook, Test-Zahlung und
+// manuelle Erfassung im Admin (admin.recordPayment) laufen alle hier durch.
+// Damit gelten Idempotenz, Rabatt, Direktvertrieb-0%, Deckelung, Mail und
+// Telegram überall identisch.
 
-export const autoRecordPayment = internalMutation({
-  args: {
-    shopContractId: v.id("shopContracts"),
-    paymentRef:     v.string(),
-    method:         v.string(),
-  },
-  handler: async (ctx, args): Promise<{ paymentNumber: number } | null> => {
+export type RecordPaymentResult = {
+  paymentNumber: number;
+  amount:        number;   // Provision
+  rate:          number;
+  phase:         string;
+  paidAmount:    number;   // tatsächlich eingenommener Betrag
+} | null;
+
+export async function recordPaymentCore(
+  ctx: MutationCtx,
+  args: { shopContractId: Id<"shopContracts">; paymentRef: string; method: string },
+): Promise<RecordPaymentResult> {
     const contract = await ctx.db.get(args.shopContractId);
     if (!contract || contract.status !== "active") return null;
 
@@ -286,8 +296,16 @@ export const autoRecordPayment = internalMutation({
       });
     }
 
-    return { paymentNumber: newCount };
+    return { paymentNumber: newCount, amount, rate, phase: rule.phase, paidAmount };
+}
+
+export const autoRecordPayment = internalMutation({
+  args: {
+    shopContractId: v.id("shopContracts"),
+    paymentRef:     v.string(),
+    method:         v.string(),
   },
+  handler: async (ctx, args): Promise<RecordPaymentResult> => recordPaymentCore(ctx, args),
 });
 
 export const cancelContractByStripe = internalMutation({

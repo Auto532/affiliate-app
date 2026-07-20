@@ -109,7 +109,7 @@ export default function ProvisionsPage() {
                 <div>
                   <p className="font-semibold text-sm text-[#f2ede4]">{(c as any).shopName}</p>
                   <p className="text-xs text-[rgba(242,237,228,.4)] mt-0.5">
-                    {phaseLabel(c.phase, c.planType)} · Zahlung #{c.paymentNumber}
+                    {phaseLabel(c.phase, c.planType, c.rate)} · Zahlung #{c.paymentNumber}
                   </p>
                 </div>
                 <div className="text-right flex-shrink-0">

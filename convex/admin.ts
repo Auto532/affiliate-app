@@ -1,6 +1,7 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { resolveCommissionRule } from "./commissionEngine";
+import { internal } from "./_generated/api";
+import { recordPaymentCore } from "./payments";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
 import { recurringPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, applyDiscount, SETUP_FEE, REWARD_PRICE_PER_MONTH } from "./pricing";
@@ -398,7 +399,11 @@ export const rejectLead = mutation({
   },
 });
 
-// ── Zahlung erfassen → Provision erzeugen ─────────────────────────────────────
+// ── Zahlung manuell erfassen (z.B. Barzahlung/Überweisung) ────────────────────
+// Läuft über DENSELBEN Kern wie Stripe-Webhook und Test-Zahlung
+// (payments.recordPaymentCore): Rabatt, Direktvertrieb 0%, Deckelung,
+// Umsatz-paidAmount, Bestätigungs-Mail und Telegram gelten damit auch hier.
+// Bei Zahlung #1 wird der Stempelkarten-Shop automatisch angelegt.
 
 export const recordPayment = mutation({
   args: {
@@ -408,50 +413,18 @@ export const recordPayment = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
 
-    const contract = await ctx.db.get(args.shopContractId);
-    if (!contract)                        throw new ConvexError("Vertrag nicht gefunden");
-    if (contract.status !== "active")     throw new ConvexError("Vertrag ist nicht aktiv, keine Provision");
-
-    const newPaymentCount = contract.paymentCount + 1;
-
-    // Duplikat-Schutz
-    const existing = await ctx.db
-      .query("commissions")
-      .withIndex("by_contract_payment", q =>
-        q.eq("shopContractId", args.shopContractId).eq("paymentNumber", newPaymentCount)
-      )
-      .unique();
-    if (existing) throw new ConvexError("Provision für diese Zahlung bereits erfasst");
-
-    // Provisions-Regel berechnen
-    const rule = resolveCommissionRule(contract.planType, newPaymentCount);
-
-    // Provision erstellen
-    const commissionId = await ctx.db.insert("commissions", {
-      affiliateId:    contract.affiliateId,
+    const result = await recordPaymentCore(ctx, {
       shopContractId: args.shopContractId,
-      paymentNumber:  newPaymentCount,
-      phase:          rule.phase,
-      planType:       contract.planType,
-      rate:           rule.rate,
-      baseAmount:     rule.baseAmount,
-      amount:         rule.amount,
-      status:         "pending",
-      triggeredAt:    Date.now(),
+      paymentRef:     `manual-${Date.now()}`,
+      method:         "manuell",
     });
+    if (!result) throw new ConvexError("Zahlung konnte nicht erfasst werden (Vertrag inaktiv oder bereits verbucht)");
 
-    // Zähler erhöhen
-    await ctx.db.patch(args.shopContractId, { paymentCount: newPaymentCount });
+    if (result.paymentNumber === 1) {
+      await ctx.scheduler.runAfter(0, internal.payments.provisionShop, { shopContractId: args.shopContractId });
+    }
 
-    await ctx.db.insert("auditLog", {
-      entityType: "commission",
-      entityId:   commissionId,
-      action:     "created",
-      actorType:  "admin",
-      note:       `Zahlung #${newPaymentCount} — ${rule.amount}€ (${rule.phase}, ${rule.rate * 100}%)`,
-    });
-
-    return { commissionId, amount: rule.amount, phase: rule.phase, rate: rule.rate };
+    return { amount: result.amount, phase: result.phase, rate: result.rate, paidAmount: result.paidAmount };
   },
 });
 

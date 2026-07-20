@@ -10,14 +10,15 @@ import QRCode from "react-qr-code";
 const APP_URL     = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL     ?? "http://localhost:3000";
 const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
 
-function nextCommission(planType: "annual" | "monthly", paymentCount: number) {
+function nextCommission(planType: "annual" | "monthly", paymentCount: number, firstYearDiscount?: number | null) {
   const next = paymentCount + 1;
   const phase =
     planType === "annual"
       ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
       : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
   const rates: Record<string, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
-  const base   = planType === "annual" ? 240 : 20; // Provision nur auf den Abo-Anteil
+  // Provision nur auf den GEZAHLTEN Abo-Anteil: Rabattcode drückt Zahlung #1
+  const base = (planType === "annual" ? 240 : 20) * (next === 1 && firstYearDiscount ? 1 - firstYearDiscount : 1);
   const amount = Math.round(base * rates[phase] * 100) / 100;
   return { amount, rate: rates[phase] };
 }
@@ -57,7 +58,7 @@ export default function ShopDetailPage() {
   const contract   = (lead as any).contract;
   const payLink    = contract?.paymentToken ? `${APP_URL}/pay/${contract.paymentToken}` : null;
   const shopLink   = lead.loatycardShopSlug ? `${STEMPEL_URL}/join/${lead.loatycardShopSlug}` : null;
-  const next       = contract ? nextCommission(contract.planType, contract.paymentCount) : null;
+  const next       = contract ? nextCommission(contract.planType, contract.paymentCount, contract.firstYearDiscount) : null;
   const isPaid     = contract && contract.paymentCount > 0;
 
   const handleCopy = () => {

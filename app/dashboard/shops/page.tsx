@@ -8,14 +8,15 @@ import Link from "next/link";
 
 const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
 
-function nextCommission(planType: "annual" | "monthly", paymentCount: number) {
+function nextCommission(planType: "annual" | "monthly", paymentCount: number, firstYearDiscount?: number | null) {
   const next = paymentCount + 1;
   const phase =
     planType === "annual"
       ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
       : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
   const rates: Record<string, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
-  const base   = planType === "annual" ? 240 : 20; // Provision nur auf den Abo-Anteil
+  // Provision nur auf den GEZAHLTEN Abo-Anteil: Rabattcode drückt Zahlung #1
+  const base = (planType === "annual" ? 240 : 20) * (next === 1 && firstYearDiscount ? 1 - firstYearDiscount : 1);
   const amount = Math.round(base * rates[phase] * 100) / 100;
   const phaseLabelMap: Record<string, string> = { initial: "Jahr 1 (35%)", year2: "Ab Jahr 2 (15%)", year3: "Ab Jahr 2 (15%)", year4_plus: "Ab Jahr 2 (15%)" };
   return { amount, phase: phaseLabelMap[phase] };
@@ -158,7 +159,7 @@ export default function ShopsPage() {
           <div className="space-y-3">
             {active.map((lead: any) => {
               const contract = lead.contract;
-              const next     = contract ? nextCommission(contract.planType, contract.paymentCount) : null;
+              const next     = contract ? nextCommission(contract.planType, contract.paymentCount, contract.firstYearDiscount) : null;
               return (
                 <div key={lead._id} className="rounded-2xl p-4 space-y-3"
                   style={{ background: "#17150f", border: "1px solid rgba(74,222,128,.15)" }}>

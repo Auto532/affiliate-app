@@ -49,13 +49,17 @@ export function resolveCommissionRule(
   return { phase, rate, baseAmount, amount };
 }
 
-// Lesbare Bezeichnung für UI
-export function phaseLabel(phase: CommissionPhase, planType: "annual" | "monthly"): string {
-  const labels: Record<CommissionPhase, string> = {
-    initial:    planType === "annual" ? "Jahr 1 (35%)" : "Jahr 1, M1–12 (35%)",
-    year2:      planType === "annual" ? "Jahr 2 (15%)" : "Jahr 2, M13–24 (15%)",
-    year3:      planType === "annual" ? "Jahr 3 (15%)" : "Jahr 3, M25–36 (15%)",
-    year4_plus: "Ab Jahr 4 (15%)",
+// Lesbare Bezeichnung für UI. Optional mit der tatsächlich gebuchten Rate der
+// Commission-Row — sonst würden alte Einträge (anderes Modell, Rabatt-Override)
+// fälschlich die heutigen Prozente anzeigen.
+export function phaseLabel(phase: CommissionPhase, planType: "annual" | "monthly", rate?: number): string {
+  const names: Record<CommissionPhase, string> = {
+    initial:    planType === "annual" ? "Jahr 1" : "Jahr 1, M1–12",
+    year2:      planType === "annual" ? "Jahr 2" : "Jahr 2, M13–24",
+    year3:      planType === "annual" ? "Jahr 3" : "Jahr 3, M25–36",
+    year4_plus: "Ab Jahr 4",
   };
-  return labels[phase];
+  const fallback: Record<CommissionPhase, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
+  const pct = Math.round((rate ?? fallback[phase]) * 100);
+  return `${names[phase]} (${pct}%)`;
 }
