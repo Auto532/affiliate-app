@@ -261,16 +261,15 @@ export const sendPaymentConfirmationEmail = internalAction({
     const renewal     = recurringPrice(args.planType, args.rewardCount);
     const isFirst     = args.paymentNumber === 1;
 
-    // Eine Rechnungszeile: bei Rabatt Normalpreis durchgestrichen + Aktionspreis in Gold
+    // Eine Rechnungszeile: bei Rabatt Normalpreis durchgestrichen + Aktionspreis in Gold.
+    // Wichtig für Handy-Clients: Betrags-Zelle komplett ohne umbrechbare Leerzeichen,
+    // sonst bricht der Betrag bei schmalen Displays mitten auseinander.
     const row = (label: string, list: number, paid: number) => `
               <tr>
-                <td style="padding:7px 0;color:#cfc9bd;font-size:14px;">${label}</td>
-                <td style="padding:7px 0;text-align:right;white-space:nowrap;">
-                  ${hasDiscount && paid < list
-                    ? `<span style="color:#6b6558;text-decoration:line-through;font-size:13px;">${eur(list)}</span>
-                       &nbsp;<span style="color:#e8c96a;font-weight:700;font-size:14px;">${eur(paid)}</span>`
-                    : `<span style="color:#f2ede4;font-weight:600;font-size:14px;">${eur(paid)}</span>`}
-                </td>
+                <td style="padding:7px 12px 7px 0;color:#cfc9bd;font-size:14px;">${label}</td>
+                <td style="padding:7px 0;text-align:right;white-space:nowrap;">${hasDiscount && paid < list
+                    ? `<span style="color:#6b6558;text-decoration:line-through;font-size:13px;">${eur(list)}</span>&nbsp;<span style="color:#e8c96a;font-weight:700;font-size:14px;">${eur(paid)}</span>`
+                    : `<span style="color:#f2ede4;font-weight:600;font-size:14px;">${eur(paid)}</span>`}</td>
               </tr>`;
 
     const rows = [
@@ -399,8 +398,8 @@ export const sendPaymentConfirmationEmail = internalAction({
               ${rows}
               <tr><td colspan="2" style="border-top:1px solid #2a2620;padding:0;line-height:0;">&nbsp;</td></tr>
               <tr>
-                <td style="padding:10px 0 2px 0;color:#f2ede4;font-size:15px;font-weight:700;">Gezahlt</td>
-                <td style="padding:10px 0 2px 0;text-align:right;color:#e8c96a;font-size:18px;font-weight:800;">${eur(args.totalPaid)}</td>
+                <td style="padding:10px 12px 2px 0;color:#f2ede4;font-size:15px;font-weight:700;">Gezahlt</td>
+                <td style="padding:10px 0 2px 0;text-align:right;color:#e8c96a;font-size:18px;font-weight:800;white-space:nowrap;">${eur(args.totalPaid)}</td>
               </tr>
             </table>
           </td></tr>
