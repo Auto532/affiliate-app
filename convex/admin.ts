@@ -567,6 +567,11 @@ export const getEarningsSummary = query({
       payingMonthly.reduce((s, c) => s + recurringPrice("monthly", c.rewardCount ?? 0), 0) +
       payingAnnual .reduce((s, c) => s + recurringPrice("annual",  c.rewardCount ?? 0) / 12, 0);
 
+    // Getrennt nach Abo-Modell: Jahresabos in €/Jahr, Monatsabos in €/Monat —
+    // leichter zu lesen als der gemischte Monats-Durchschnitt.
+    const monthlyPlanRunRate = payingMonthly.reduce((s, c) => s + recurringPrice("monthly", c.rewardCount ?? 0), 0);
+    const annualPlanRunRate  = payingAnnual .reduce((s, c) => s + recurringPrice("annual",  c.rewardCount ?? 0), 0);
+
     return {
       revenueTotal:   Math.round(revenueTotal   * 100) / 100,
       setupFeesTotal: Math.round(setupFeesTotal  * 100) / 100,
@@ -584,6 +589,8 @@ export const getEarningsSummary = query({
       canceledContracts: contracts.filter(c => c.status === "canceled").length,
       monthlyRunRate:  Math.round(monthlyRunRate * 100) / 100,
       yearlyRunRate:   Math.round(monthlyRunRate * 12 * 100) / 100,
+      monthlyPlanRunRate: Math.round(monthlyPlanRunRate * 100) / 100,
+      annualPlanRunRate:  Math.round(annualPlanRunRate  * 100) / 100,
     };
   },
 });
