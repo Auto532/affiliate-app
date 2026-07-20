@@ -29,6 +29,11 @@
 export interface DiscountDef {
   firstYearDiscount: number; // Anteil, z.B. 0.5 = 50%
   label:             string;
+  // Für welche Abo-Modelle der Code einlösbar ist. LOYAL50 gilt NUR für das
+  // Jahresabo. Ein künftiger Monatsabo-Code bekommt hier ["monthly"] — dann
+  // aber auch discountAppliesTo in pricing.ts erweitern (Laufzeit des Rabatts
+  // beim Monatsabo definieren, z.B. nur Rechnung #1 oder Rechnungen #1-N).
+  plans:             ("annual" | "monthly")[];
   // Optional: überschreibt die Provisions-Rate der ERSTEN Zahlung (einmalig) für
   // Verträge mit diesem Code. Nur gesetzt = greift. Ab Zahlung #2 gelten wieder
   // die normalen Provisions-Regeln (commissionEngine).
@@ -36,7 +41,7 @@ export interface DiscountDef {
 }
 
 export const DISCOUNT_CODES: Record<string, DiscountDef> = {
-  LOYAL50: { firstYearDiscount: 0.5, label: "50 % auf das erste Jahr" },
+  LOYAL50: { firstYearDiscount: 0.5, label: "50 % auf das erste Jahr", plans: ["annual"] },
 };
 
 export function lookupDiscount(code: string): DiscountDef | null {

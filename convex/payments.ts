@@ -3,7 +3,7 @@ import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
-import { planPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, SETUP_FEE, applyDiscount } from "./pricing";
+import { planPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, SETUP_FEE, applyDiscount, recurringPrice, discountAppliesTo } from "./pricing";
 import { lookupDiscount } from "./discounts";
 import { escapeHtml } from "./htmlEscape";
 
@@ -43,15 +43,21 @@ export const getByPaymentToken = query({
     // Rechnungsbestandteile: Abo + Bonusprogramm (wiederkehrend) + Einrichtung
     // inkl. Design (nur erste Rechnung). Mit Rabattcode: Prozent-Rabatt auf
     // Abo + Bonus, Einrichtung fix zum Aktionspreis 45 € statt 99 €.
+    // Rabatt-Laufzeit: Jahresabo nur Rechnung #1; Monatsabo Rechnungen #1-12
+    // (das erste Jahr, z.B. 10 € statt 20 € pro Monat).
     const rewardCount  = contract.rewardCount ?? 0;
     const isFirst      = contract.paymentCount === 0;
-    const hasPromo     = isFirst && !!contract.firstYearDiscount;
+    const d            = contract.firstYearDiscount ?? 0;
+    const inPromo      = !!d && discountAppliesTo(contract.planType, contract.paymentCount + 1);
+    const hasPromo     = isFirst && inPromo;
     const aboPrice     = planPrice(contract.planType);
     const rewardsPrice = rewardPrice(contract.planType) * rewardCount;
     const setupFeeDue  = isFirst ? setupFee(hasPromo) : 0;
     const normalPrice  = aboPrice + rewardsPrice + (isFirst ? SETUP_FEE : 0); // Listenbetrag dieser Rechnung
-    const payableAmount = hasPromo
-      ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount!)
+    const payableAmount = inPromo
+      ? (isFirst
+          ? discountedFirstInvoice(contract.planType, rewardCount, d)
+          : applyDiscount(recurringPrice(contract.planType, rewardCount), d))
       : normalPrice;
 
     return {
@@ -69,9 +75,10 @@ export const getByPaymentToken = query({
       rewardsPrice,
       setupFee:       setupFeeDue,
       setupFeeNormal: isFirst ? SETUP_FEE : 0,   // für die durchgestrichene 99 bei Aktionspreis
-      // Rabatt-Status (nur Anzeige — verbindlich ist der Server)
-      discountCode:      contract.discountCode ?? null,
-      firstYearDiscount: contract.firstYearDiscount ?? null,
+      // Rabatt-Status (nur Anzeige — verbindlich ist der Server). Nach Ablauf
+      // der Rabatt-Laufzeit (Monatsabo: ab Rechnung #13) nicht mehr ausweisen.
+      discountCode:      inPromo ? (contract.discountCode ?? null) : null,
+      firstYearDiscount: inPromo ? d : null,
       normalPrice,
       discountedPrice:   contract.discountedPrice ?? null,
       payLaterAt:        contract.payLaterAt ?? null,
@@ -174,20 +181,23 @@ export async function recordPaymentCore(
 
     // Tatsächlich eingenommener Betrag DIESER Zahlung:
     // Abo + Bonusprogramm, bei Zahlung #1 zusätzlich Einrichtung inkl. Design.
-    // Rabattcode (nur Zahlung #1): Prozent-Rabatt auf Abo + Bonus, Einrichtung
-    // fix 45 € statt 99 €. Ab #2 Normalpreis.
+    // Rabattcode: Prozent-Rabatt auf Abo + Bonus, Einrichtung fix 45 € statt
+    // 99 €. Laufzeit: Jahresabo nur Zahlung #1, Monatsabo Zahlungen #1-12
+    // (das erste Jahr, z.B. 10 € statt 20 € pro Monat). Danach Normalpreis.
     const rewardCount = contract.rewardCount ?? 0;
     const isFirst     = newCount === 1;
+    const promoRate   = contract.firstYearDiscount ?? 0;
+    const inPromo     = !!promoRate && discountAppliesTo(contract.planType, newCount);
     const listTotal   = invoiceTotal(contract.planType, rewardCount, isFirst);
-    const paidAmount  = (isFirst && contract.firstYearDiscount)
-      ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
+    const paidAmount  = inPromo
+      ? (isFirst
+          ? discountedFirstInvoice(contract.planType, rewardCount, promoRate)
+          : applyDiscount(recurringPrice(contract.planType, rewardCount), promoRate))
       : listTotal;
 
     // Provisions-Basis ist NUR der Abo-Anteil (ohne Einrichtung & Bonusprogramm).
     const aboList = planPrice(contract.planType);
-    const aboPaid = (isFirst && contract.firstYearDiscount)
-      ? applyDiscount(aboList, contract.firstYearDiscount)
-      : aboList;
+    const aboPaid = inPromo ? applyDiscount(aboList, promoRate) : aboList;
 
     // Provisions-Rate: normal aus commissionEngine. Ein Rabattcode kann die Rate
     // der ERSTEN Zahlung einmalig überschreiben (z.B. LOYAL50 = 50%). Ab Zahlung #2
@@ -233,8 +243,8 @@ export async function recordPaymentCore(
 
     await ctx.db.patch(args.shopContractId, { paymentCount: newCount });
 
-    const discountNote = (isFirst && contract.firstYearDiscount)
-      ? ` · Rabatt ${Math.round(contract.firstYearDiscount * 100)}% (gezahlt €${paidAmount})`
+    const discountNote = inPromo
+      ? ` · Rabatt ${Math.round(promoRate * 100)}% (gezahlt €${paidAmount})`
       : "";
     await ctx.db.insert("auditLog", {
       entityType: "commission",
@@ -259,7 +269,7 @@ export async function recordPaymentCore(
     // (bei Rabattcode mit durchgestrichenen Normalpreisen + Erstjahr-Hinweis).
     const lead = await ctx.db.get(contract.shopLeadId);
     if (lead?.ownerEmail) {
-      const d           = (isFirst && contract.firstYearDiscount) || 0;
+      const d           = inPromo ? promoRate : 0;
       const rewardsList = rewardPrice(contract.planType) * rewardCount;
       await ctx.scheduler.runAfter(0, internal.emails.sendPaymentConfirmationEmail, {
         ownerEmail:    lead.ownerEmail,
@@ -477,6 +487,9 @@ export const applyDiscountCode = action({
 
     const discount = lookupDiscount(args.code);
     if (!discount)                       return { valid: false, reason: "Code ungültig" };
+    if (!discount.plans.includes(info.planType)) {
+      return { valid: false, reason: `Dieser Code gilt nur für das ${discount.plans.includes("annual") ? "Jahresabo" : "Monatsabo"}` };
+    }
     if (!info.affiliateDiscountEligible) return { valid: false, reason: "Für diesen Vertrag nicht verfügbar" };
 
     // Rabatt: Prozent auf Abo + Bonusprogramm, Einrichtung fix 45 € statt 99 €.

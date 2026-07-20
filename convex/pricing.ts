@@ -48,3 +48,10 @@ export function applyDiscount(amount: number, discount: number | undefined | nul
   if (!discount) return amount;
   return Math.round(amount * (1 - discount) * 100) / 100;
 }
+
+// Gilt der Erstjahr-Rabatt für diese Zahlung? Rabattcodes gibt es NUR für das
+// Jahresabo, und dort nur auf Rechnung #1 (die deckt das ganze erste Jahr ab).
+// Das Monatsabo ist grundsätzlich rabattfrei (applyDiscountCode lehnt ab).
+export function discountAppliesTo(planType: "annual" | "monthly", paymentNumber: number): boolean {
+  return planType === "annual" && paymentNumber === 1;
+}

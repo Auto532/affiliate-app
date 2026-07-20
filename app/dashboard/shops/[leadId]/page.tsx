@@ -17,8 +17,10 @@ function nextCommission(planType: "annual" | "monthly", paymentCount: number, fi
       ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
       : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
   const rates: Record<string, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
-  // Provision nur auf den GEZAHLTEN Abo-Anteil: Rabattcode drückt Zahlung #1
-  const base = (planType === "annual" ? 240 : 20) * (next === 1 && firstYearDiscount ? 1 - firstYearDiscount : 1);
+  // Provision nur auf den GEZAHLTEN Abo-Anteil: Rabattcodes gibt es nur für das
+  // Jahresabo und dort nur auf Zahlung #1
+  const inPromo = !!firstYearDiscount && planType === "annual" && next === 1;
+  const base = (planType === "annual" ? 240 : 20) * (inPromo ? 1 - firstYearDiscount! : 1);
   const amount = Math.round(base * rates[phase] * 100) / 100;
   return { amount, rate: rates[phase] };
 }

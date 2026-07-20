@@ -244,6 +244,10 @@ export const approveAffiliate = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    const affiliate = await ctx.db.get(args.affiliateId);
+    if (!affiliate) throw new ConvexError("Partner nicht gefunden");
+    const wasPending = affiliate.status === "pending";
+
     await ctx.db.patch(args.affiliateId, { status: "active" });
     await ctx.db.insert("auditLog", {
       entityType: "affiliate",
@@ -252,6 +256,16 @@ export const approveAffiliate = mutation({
       actorType:  "admin",
       note:       "Durch Admin freigeschaltet",
     });
+
+    // Willkommens-Mail nur bei der ERSTEN Freigabe (nicht wenn z.B. ein
+    // gesperrter Partner reaktiviert wird).
+    if (wasPending && affiliate.email) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendPartnerWelcomeEmail, {
+        name:         affiliate.name,
+        email:        affiliate.email,
+        referralCode: affiliate.referralCode,
+      });
+    }
   },
 });
 

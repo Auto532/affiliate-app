@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
+import { internal } from "./_generated/api";
 import { v, ConvexError } from "convex/values";
 import { derivePasswordHash, newSalt, timingSafeEqual } from "./passwords";
 import { assertNotLocked, recordFailure, clearFailures } from "./rateLimit";
@@ -116,6 +117,10 @@ export const register = mutation({
       actorType:  "affiliate",
       actorId:    affiliateId,
     });
+
+    // Eingangs-Mail: Anfrage wird geprüft. Die Willkommens-Mail kommt erst
+    // mit der Freigabe durch den Admin (admin.approveAffiliate).
+    await ctx.scheduler.runAfter(0, internal.emails.sendPartnerRequestReceivedEmail, { name, email });
 
     return { affiliateId, referralCode: code };
   },
@@ -408,6 +413,9 @@ export const acceptAffiliateInvite = mutation({
       actorType:  "affiliate",
       actorId:    affiliateId,
     });
+
+    // Gleiche Eingangs-Mail wie bei der offenen Registrierung.
+    await ctx.scheduler.runAfter(0, internal.emails.sendPartnerRequestReceivedEmail, { name, email });
 
     return { affiliateId, referralCode: code };
   },

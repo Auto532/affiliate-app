@@ -75,7 +75,7 @@ export const sendPaymentConfirmationEmail = internalAction({
                 Dein Angebot: ${escapeHtml(args.discountCode ?? "")}
               </p>
               <p style="margin:0;color:#cfc9bd;font-size:13px;line-height:1.6;">
-                Der Aktionspreis gilt nur für deine erste Rechnung${args.planType === "annual" ? " (dein erstes Jahr)" : ""}.
+                Der Aktionspreis gilt nur für deine erste Rechnung (dein erstes Jahr).
                 Danach läuft dein Abo zum Normalpreis von <strong style="color:#f2ede4;">${eur(renewal)} pro ${periodTxt}</strong> weiter.
                 Die Einrichtung fällt natürlich nur einmalig an.
               </p>
@@ -274,7 +274,7 @@ export const sendPaymentConfirmationEmail = internalAction({
       `Gezahlt: ${eur(args.totalPaid)}`,
       ``,
       ...(hasDiscount ? [
-        `Dein Angebot ${args.discountCode}: Der Aktionspreis gilt nur für die erste Rechnung.`,
+        `Dein Angebot ${args.discountCode}: Der Aktionspreis gilt nur für die erste Rechnung (dein erstes Jahr).`,
         `Danach läuft dein Abo zum Normalpreis von ${eur(renewal)} pro ${periodTxt} weiter.`,
         ``,
       ] : []),
@@ -318,5 +318,178 @@ export const sendPaymentConfirmationEmail = internalAction({
     if (!res.ok) {
       console.error(`Resend-Fehler ${res.status}: ${await res.text()}`);
     }
+  },
+});
+
+// ── Partner-Mails ─────────────────────────────────────────────────────────────
+// (1) Nach der Registrierung (offen oder Einladungslink): Anfrage eingegangen,
+//     wird geprüft. (2) Nach der Admin-Freigabe: Willkommens-Mail mit
+//     Login-Link, Partner-Code und Provisions-Konditionen.
+
+const PARTNER_APP_URL = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "https://partner.loyaltycard.info";
+
+function partnerMailShell(inner: string): string {
+  return `
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0d0c0a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 16px;">
+  <tr><td align="center">
+  <table width="540" cellpadding="0" cellspacing="0"
+    style="background:#17150f;border-radius:20px;overflow:hidden;max-width:540px;width:100%;">
+    <tr>
+      <td style="background:#0d0c0a;padding:28px 32px;text-align:center;">
+        <p style="margin:0;color:#c9a227;font-size:24px;font-weight:900;letter-spacing:6px;">LOYALTYCARD</p>
+        <p style="margin:6px 0 0 0;color:rgba(242,237,228,0.45);font-size:12px;letter-spacing:2px;">PARTNERPROGRAMM</p>
+      </td>
+    </tr>
+    ${inner}
+    <tr>
+      <td style="padding:0 32px 32px 32px;border-top:1px solid #2a2620;">
+        <p style="margin:16px 0 0 0;color:#f2ede4;font-size:15px;font-weight:600;">Dein LoyaltyCard-Team</p>
+      </td>
+    </tr>
+    <tr>
+      <td style="background:#1c1a13;padding:18px 32px;text-align:center;">
+        <p style="margin:0;font-size:12px;color:#6b6558;">LoyaltyCard &middot; Digitale Stempelkarten für lokale Shops</p>
+      </td>
+    </tr>
+  </table>
+  </td></tr>
+</table>
+</body>
+</html>`;
+}
+
+async function sendViaResend(to: string, subject: string, html: string, text: string): Promise<void> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method:  "POST",
+    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+    body:    JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html, text }),
+  });
+  if (!res.ok) console.error(`Resend-Fehler ${res.status}: ${await res.text()}`);
+}
+
+export const sendPartnerRequestReceivedEmail = internalAction({
+  args: { name: v.string(), email: v.string() },
+  handler: async (_ctx, args) => {
+    if (!RESEND_KEY) return;
+
+    const inner = `
+    <tr>
+      <td style="padding:36px 32px 20px 32px;">
+        <h1 style="margin:0 0 16px 0;font-size:22px;color:#f2ede4;font-weight:800;">
+          Deine Anfrage ist eingegangen, ${escapeHtml(args.name)}!
+        </h1>
+        <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.75;">
+          Danke für deine Registrierung im <strong style="color:#f2ede4;">LoyaltyCard-Partnerprogramm</strong>.
+          Wir prüfen deine Angaben jetzt und schalten deinen Zugang frei. Das geht
+          normalerweise schnell, meist innerhalb von 24 Stunden.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 32px 28px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0;color:#cfc9bd;font-size:14px;line-height:1.7;">
+              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; Du musst nichts weiter tun.
+              Sobald dein Zugang freigeschaltet ist, bekommst du eine E-Mail von uns und kannst direkt loslegen.
+            </p>
+          </td></tr>
+        </table>
+      </td>
+    </tr>`;
+
+    const text = [
+      `Deine Anfrage ist eingegangen, ${args.name}!`,
+      ``,
+      `Danke für deine Registrierung im LoyaltyCard-Partnerprogramm.`,
+      `Wir prüfen deine Angaben jetzt und schalten deinen Zugang frei, meist innerhalb von 24 Stunden.`,
+      ``,
+      `Du musst nichts weiter tun. Sobald dein Zugang freigeschaltet ist, bekommst du eine E-Mail von uns.`,
+      ``,
+      `Dein LoyaltyCard-Team`,
+    ].join("\n");
+
+    await sendViaResend(args.email, "Deine Partner-Anfrage bei LoyaltyCard ist eingegangen",
+      partnerMailShell(inner), text);
+  },
+});
+
+export const sendPartnerWelcomeEmail = internalAction({
+  args: { name: v.string(), email: v.string(), referralCode: v.optional(v.string()) },
+  handler: async (_ctx, args) => {
+    if (!RESEND_KEY) return;
+
+    const codeRow = args.referralCode ? `
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; Dein Partner-Code: <strong style="color:#e8c96a;">${escapeHtml(args.referralCode)}</strong>
+            </p>` : "";
+
+    const inner = `
+    <tr>
+      <td style="padding:36px 32px 20px 32px;">
+        <h1 style="margin:0 0 16px 0;font-size:22px;color:#f2ede4;font-weight:800;">
+          Willkommen im Partnerprogramm, ${escapeHtml(args.name)}!
+        </h1>
+        <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.75;">
+          Deine Anfrage ist geprüft und dein Zugang ist <strong style="color:#f2ede4;">ab sofort freigeschaltet</strong>.
+          Du kannst dich jetzt einloggen und deine ersten Shops einreichen.
+        </p>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#f2ede4;text-transform:uppercase;letter-spacing:1px;">
+              Deine Konditionen
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; 35% Provision auf den Abo-Anteil im ersten Jahr
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; Danach dauerhaft 15%, solange der Shop aktiv bleibt
+            </p>${codeRow}
+          </td></tr>
+        </table>
+      </td>
+    </tr>
+    <tr>
+      <td style="padding:0 32px 28px 32px;">
+        <a href="${PARTNER_APP_URL}/login"
+          style="display:inline-block;background:linear-gradient(120deg,#e8c96a,#c9a227);color:#0d0c0a;padding:14px 28px;border-radius:12px;
+                 text-decoration:none;font-weight:700;font-size:15px;">
+          Zum Partner-Login &rarr;
+        </a>
+        <p style="margin:14px 0 0 0;font-size:13px;color:#8a8577;line-height:1.6;">
+          Tipp: Im Dashboard findest du unter <strong style="color:#cfc9bd;">Unterlagen</strong> alles
+          fürs Verkaufsgespräch, vom Pitch über Einwände bis zur Live-Demo.
+          Bei Fragen erreichst du uns per WhatsApp: <strong style="color:#cfc9bd;">${WHATSAPP_NR}</strong>
+        </p>
+      </td>
+    </tr>`;
+
+    const text = [
+      `Willkommen im Partnerprogramm, ${args.name}!`,
+      ``,
+      `Deine Anfrage ist geprüft und dein Zugang ist ab sofort freigeschaltet.`,
+      ``,
+      `Deine Konditionen:`,
+      `- 35% Provision auf den Abo-Anteil im ersten Jahr`,
+      `- danach dauerhaft 15%, solange der Shop aktiv bleibt`,
+      ...(args.referralCode ? [`- dein Partner-Code: ${args.referralCode}`] : []),
+      ``,
+      `Login: ${PARTNER_APP_URL}/login`,
+      `Tipp: Im Dashboard findest du unter Unterlagen alles fürs Verkaufsgespräch.`,
+      `Fragen? WhatsApp: ${WHATSAPP_NR}`,
+      ``,
+      `Dein LoyaltyCard-Team`,
+    ].join("\n");
+
+    await sendViaResend(args.email, "Willkommen im LoyaltyCard-Partnerprogramm! Dein Zugang ist freigeschaltet",
+      partnerMailShell(inner), text);
   },
 });
