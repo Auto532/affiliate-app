@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 
 const http = httpRouter();
 
@@ -17,6 +17,32 @@ http.route({
     } catch (e: any) {
       return new Response(e.message, { status: 400 });
     }
+  }),
+});
+
+// Abrechnungs-Sync aus der Stempelkarten-App: hält contract.rewardCount mit den
+// echten Bonus-Stufen des Shops synchron (siehe admin.syncRewardCountForShop).
+http.route({
+  path:    "/sync-reward-count",
+  method:  "POST",
+  handler: httpAction(async (ctx, req) => {
+    const body = await req.json();
+    const { adminPin, loatycardShopId, rewardCount } = body;
+
+    if (!adminPin || adminPin !== process.env.ADMIN_SECRET) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await ctx.runMutation(internal.admin.syncRewardCountForShop, {
+      loatycardShopId: String(loatycardShopId ?? ""),
+      rewardCount:     Number(rewardCount ?? 0),
+    });
+    return new Response(JSON.stringify(result), {
+      headers: { "Content-Type": "application/json" },
+    });
   }),
 });
 

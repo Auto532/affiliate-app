@@ -226,14 +226,41 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: "rechtliches", title: "Rechtliches: das braucht der Inhaber", icon: "⚖️",
+    body: (
+      <div className="space-y-3">
+        <P>
+          Jede Stempelkarte bekommt ein eigenes Impressum und eigene Rechtstexte, damit der
+          Shop rechtlich sauber online geht. Sag dem Inhaber am besten <b>schon im Gespräch</b>,
+          welche Angaben wir dafür brauchen. Dann liegt alles bereit, wenn wir uns nach der
+          Zahlung für die Einrichtung melden.
+        </P>
+        <H>Das muss der Inhaber bereithalten</H>
+        <Li items={[
+          <>Impressum: Firmenname, Inhaber, Anschrift, E-Mail und Telefonnummer</>,
+          <>Umsatzsteuer-ID bzw. Steuernummer</>,
+          <>Handelsregisternummer und Registergericht (nur falls eingetragen)</>,
+          <>AGB des Shops, falls vorhanden</>,
+          <>Datenschutzerklärung bzw. ein Ansprechpartner für Datenschutz</>,
+        ]} />
+        <H>Worauf du achten musst</H>
+        <Li items={[
+          <>Nur ankündigen, was gebraucht wird. <b>Keine Rechtsberatung geben</b>, auch nicht zu AGB oder Datenschutz. Alle Detailfragen klären wir nach der Zahlung direkt mit dem Inhaber.</>,
+          <>Die komplette Liste steht auch nochmal in der Willkommens-Mail, die der Inhaber nach der Zahlung bekommt. Er muss sich also nichts merken.</>,
+          <>Hat der Shop keine eigenen AGB oder Datenschutzerklärung, ist das kein Problem und kein Abschluss-Hindernis, das klären wir bei der Einrichtung.</>,
+        ]} />
+      </div>
+    ),
+  },
+  {
     id: "ablauf", title: "So läuft ein Abschluss", icon: "📋",
     body: (
       <div className="space-y-2">
         {[
           { n: 1, t: "Shop einreichen", d: "Über ‚Neuen Shop einreichen' das Formular ausfüllen, oder dem Inhaber deinen Einladungslink geben, dann füllt er es selbst aus." },
-          { n: 2, t: "Bestätigung", d: "Der Inhaber bekommt automatisch eine Bestätigungs-E-Mail. Du siehst den Shop sofort unter ‚Meine Shops'." },
-          { n: 3, t: "Zahlung", d: "Der Inhaber zahlt über den Zahlungslink (Karte oder SEPA). Den Link findest du beim Shop unter ‚Meine Shops'." },
-          { n: 4, t: "Automatische Einrichtung", d: "Direkt nach der Zahlung wird die Stempelkarte automatisch angelegt. Der Inhaber erhält QR-Code und Zugang." },
+          { n: 2, t: "Zahlung", d: "Der Inhaber zahlt über den Zahlungslink (Karte oder SEPA). Den Link findest du beim Shop unter ‚Meine Shops'. Vor der Zahlung bekommt er bewusst noch keine E-Mail." },
+          { n: 3, t: "Willkommens-Mail", d: "Direkt nach der Zahlung bekommt der Inhaber automatisch EINE Mail: Willkommen, Zahlungsübersicht und die Liste der Unterlagen (Impressum und Co.)." },
+          { n: 4, t: "Automatische Einrichtung", d: "Mit der Zahlung wird die Stempelkarte automatisch angelegt. Wir melden uns innerhalb von 24 Stunden für Design und Einrichtung." },
           { n: 5, t: "Deine Provision", d: "Erscheint sofort unter ‚Provisionen' und wird nach Bestätigung per SEPA ausgezahlt." },
         ].map(s => (
           <div key={s.n} className="flex gap-3 rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>

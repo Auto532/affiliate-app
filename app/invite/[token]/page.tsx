@@ -120,13 +120,13 @@ export default function InvitePage() {
         {/* Bonusprogramm (optional) */}
         <div>
           <label className="block text-xs text-[rgba(242,237,228,.5)] mb-1.5">
-            Bonusprogramm: Anzahl Belohnungen (optional)
+            Bonusprogramm: zusätzliche Belohnungsstufen (optional)
           </label>
           <div className="rounded-xl p-3 flex items-center justify-between"
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
             <div>
-              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Belohnung{rewardCount === 1 ? "" : "en"}</p>
-              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">5 € / Monat pro Belohnung</p>
+              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Zusatz-Stufe{rewardCount === 1 ? "" : "n"}</p>
+              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">Die erste Belohnung ist immer inklusive. 5 € / Monat pro Zusatz-Stufe</p>
             </div>
             <div className="flex items-center gap-2">
               <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}

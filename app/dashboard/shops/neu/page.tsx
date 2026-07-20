@@ -115,14 +115,15 @@ export default function NewShopPage() {
         {/* Bonusprogramm */}
         <div>
           <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">
-            Bonusprogramm: Anzahl Belohnungen (optional)
+            Bonusprogramm: zusätzliche Belohnungsstufen (optional)
           </label>
           <div className="rounded-xl p-3 flex items-center justify-between"
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
             <div>
-              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Belohnung{rewardCount === 1 ? "" : "en"}</p>
+              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Zusatz-Stufe{rewardCount === 1 ? "" : "n"}</p>
               <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">
-                €5 / Monat pro Belohnung{planType === "annual" ? " (€60 / Jahr)" : ""}
+                Die erste Belohnung (z.B. 10 Stempel) ist immer inklusive.
+                {" "}€5 / Monat pro Zusatz-Stufe{planType === "annual" ? " (€60 / Jahr)" : ""}
                 {rewardCount > 0 && ` · gesamt ${planType === "annual" ? `€${rewardCount * 60} / Jahr` : `€${rewardCount * 5} / Monat`}`}
               </p>
             </div>

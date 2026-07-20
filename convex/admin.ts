@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
@@ -815,6 +815,52 @@ export const updateContractRewardCount = mutation({
     });
 
     return { rewardCount };
+  },
+});
+
+// Automatischer Abrechnungs-Sync aus der Stempelkarten-App (HTTP /sync-reward-count):
+// rewardCount folgt den ECHTEN Bonus-Stufen des Shops. Gezählt werden nur aktive
+// Zusatz-Stufen oberhalb der Basis-Belohnung und nur bei eingeschaltetem
+// Bonusprogramm-Toggle — die Basis-Belohnung ist immer kostenlos. Läuft bei
+// jeder Stufen-/Toggle-Änderung, egal ob Admin oder Inhaber sie macht.
+export const syncRewardCountForShop = internalMutation({
+  args: { loatycardShopId: v.string(), rewardCount: v.number() },
+  handler: async (ctx, args) => {
+    const lead = (await ctx.db.query("shopLeads").collect())
+      .find(l => l.loatycardShopId === args.loatycardShopId);
+    if (!lead) return { synced: false, reason: "kein Lead" };
+
+    const contract = await ctx.db
+      .query("shopContracts")
+      .withIndex("by_shopLead", q => q.eq("shopLeadId", lead._id))
+      .unique();
+    if (!contract || contract.status !== "active") return { synced: false, reason: "kein aktiver Vertrag" };
+
+    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount)));
+    const oldCount    = contract.rewardCount ?? 0;
+    if (rewardCount === oldCount) return { synced: true, rewardCount, unchanged: true };
+
+    await ctx.db.patch(contract._id, { rewardCount });
+    await ctx.db.patch(lead._id, { rewardCount });
+
+    // Erste Zahlung noch offen + Rabatt hinterlegt → Erstrechnung neu berechnen
+    if (contract.paymentCount === 0 && contract.firstYearDiscount) {
+      const normalPrice = invoiceTotal(contract.planType, rewardCount, true);
+      await ctx.db.patch(contract._id, {
+        normalPrice,
+        discountedPrice: discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
+      });
+    }
+
+    await ctx.db.insert("auditLog", {
+      entityType: "shopContract",
+      entityId:   contract._id,
+      action:     "reward_count_synced",
+      actorType:  "system",
+      note:       `Bonus-Stufen im Shop geändert: ${oldCount} → ${rewardCount} Belohnung(en) · ${lead.shopName}`,
+    });
+
+    return { synced: true, rewardCount };
   },
 });
 
