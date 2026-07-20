@@ -270,6 +270,22 @@ export const autoRecordPayment = internalMutation({
       });
     }
 
+    // Telegram an den Admin: bei Direktvertrieb und bei Verlängerungen hier;
+    // die erste Partner-Zahlung meldet stattdessen provisionShop ("Shop ist live").
+    if (contract.isDirect || newCount > 1) {
+      await ctx.scheduler.runAfter(0, internal.notifications.notifyPaymentReceived, {
+        shopName:         lead?.shopName ?? "—",
+        ownerName:        lead?.ownerName ?? "—",
+        amount:           Math.round(paidAmount * 100) / 100,
+        paymentNumber:    newCount,
+        planType:         contract.planType,
+        isDirect:         contract.isDirect === true,
+        commissionAmount: amount,
+        commissionRate:   rate,
+        wasPayLater:      newCount === 1 && !!contract.payLaterAt,
+      });
+    }
+
     return { paymentNumber: newCount };
   },
 });

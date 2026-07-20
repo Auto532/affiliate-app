@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { internal } from "./_generated/api";
 import { requireValidEmail, requireFilled } from "./validation";
 
 async function requireAffiliate(ctx: any, token: string) {
@@ -73,22 +72,8 @@ export const submitLead = mutation({
       note:       `${affiliate.name} · Plan: ${args.planType}`,
     });
 
-    // Willkommens-Mail erst nach Zahlungseingang (autoRecordPayment) — wer
-    // noch nicht gezahlt hat (z.B. "Später zahlen"), bekommt noch keine Mail.
-    await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
-      shopName,
-      ownerName,
-      ownerEmail,
-      ownerPhone:    args.ownerPhone,
-      city:          args.city,
-      businessType:  args.businessType,
-      planType:      args.planType,
-      rewardCount,
-      affiliateName: affiliate.name,
-      affiliateCode: affiliate.referralCode,
-      viaInvite:     false,
-    });
-
+    // Bewusst KEINE Mail und KEIN Telegram beim Einreichen: beides kommt erst
+    // mit dem Zahlungseingang (autoRecordPayment bzw. provisionShop).
     return leadId;
   },
 });
@@ -183,22 +168,7 @@ export const acceptInvite = mutation({
       note:       `${args.ownerName} · Plan: ${planType}`,
     });
 
-    // Willkommens-Mail erst nach Zahlungseingang (autoRecordPayment), siehe submitLead.
-    const inviteAffiliate = await ctx.db.get(lead.affiliateId);
-    await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
-      shopName,
-      ownerName,
-      ownerEmail,
-      ownerPhone:    args.ownerPhone,
-      city:          args.city,
-      businessType:  args.businessType,
-      planType,
-      rewardCount,
-      affiliateName: inviteAffiliate?.name ?? "—",
-      affiliateCode: inviteAffiliate?.referralCode,
-      viaInvite:     true,
-    });
-
+    // Bewusst KEINE Mail und KEIN Telegram beim Einreichen, siehe submitLead.
     return lead._id;
   },
 });

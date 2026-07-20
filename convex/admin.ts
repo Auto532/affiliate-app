@@ -1,6 +1,5 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
-import { internal } from "./_generated/api";
 import { resolveCommissionRule } from "./commissionEngine";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
@@ -234,19 +233,8 @@ export const createDirectShopContract = mutation({
       note:       `${args.shopName} · Plan: ${args.planType} · Shop-ID: ${args.loatycardShopId}`,
     });
 
-    await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
-      shopName:      args.shopName,
-      ownerName:     args.ownerName ?? "—",
-      ownerEmail:    args.ownerEmail,
-      ownerPhone:    args.ownerPhone,
-      city:          args.city,
-      businessType:  args.businessType,
-      planType:      args.planType,
-      affiliateName: "Admin (Direktvertrieb)",
-      viaInvite:     false,
-      direct:        true,
-    });
-
+    // Kein Telegram beim Anlegen — die Meldung kommt erst mit dem
+    // Zahlungseingang bzw. bei "Später zahlen".
     return { paymentToken };
   },
 });
@@ -775,6 +763,12 @@ export const getContractForShop = query({
       firstPaidAt,
       lastPaidAt:        lastPaid?.triggeredAt ?? null,
       nextRenewalAt,
+      payments: payments.map(p => ({
+        paymentNumber: p.paymentNumber,
+        paidAt:        p.triggeredAt,
+        amount:        (p as any).paidAmount ?? p.baseAmount,
+        isTest:        (p.paymentRef ?? "").startsWith("test-"),
+      })),
     };
   },
 });

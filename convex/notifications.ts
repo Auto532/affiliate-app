@@ -4,7 +4,6 @@
 
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { planPrice } from "./pricing";
 import { escapeHtml } from "./htmlEscape";
 
 const TG_TOKEN   = process.env.TELEGRAM_BOT_TOKEN ?? "";
@@ -38,48 +37,35 @@ export const notifyPayLater = internalAction({
   },
 });
 
-export const notifyNewShopLead = internalAction({
+// Zahlung eingegangen. Feuert bei Direktvertriebs-Zahlungen und Verlängerungen;
+// die erste Partner-Zahlung meldet stattdessen provisionShop ("Shop ist live").
+// Beim bloßen Anlegen/Einreichen eines Shops geht bewusst KEIN Telegram raus.
+export const notifyPaymentReceived = internalAction({
   args: {
-    shopName:      v.string(),
-    ownerName:     v.string(),
-    ownerEmail:    v.optional(v.string()),
-    ownerPhone:    v.optional(v.string()),
-    city:          v.optional(v.string()),
-    businessType:  v.optional(v.string()),
-    planType:      v.union(v.literal("annual"), v.literal("monthly")),
-    rewardCount:   v.optional(v.number()),
-    affiliateName: v.string(),
-    affiliateCode: v.optional(v.string()),
-    viaInvite:     v.boolean(),
-    direct:        v.optional(v.boolean()),   // Admin hat den Shop direkt angelegt
+    shopName:       v.string(),
+    ownerName:      v.string(),
+    amount:         v.number(),
+    paymentNumber:  v.number(),
+    planType:       v.union(v.literal("annual"), v.literal("monthly")),
+    isDirect:       v.boolean(),
+    commissionAmount: v.number(),
+    commissionRate:   v.number(),
+    wasPayLater:    v.boolean(),
   },
   handler: async (_ctx, args): Promise<void> => {
-    const planLabel = args.planType === "annual"
-      ? `Jahresabo (€${planPrice("annual")})`
-      : `Monatsabo (€${planPrice("monthly")})`;
-
-    const line = (emoji: string, label: string, val?: string) =>
-      val ? `\n${emoji} <b>${label}:</b> ${escapeHtml(val)}` : "";
-
-    const partnerBlock = args.direct
-      ? `🏢 <b>Weg:</b> Admin direkt (ohne Partner, keine Provision)`
-      : `🤝 <b>Partner:</b> ${escapeHtml(args.affiliateName)}` +
-        (args.affiliateCode ? ` (${escapeHtml(args.affiliateCode)})` : "") +
-        `\n📥 <b>Weg:</b> ${args.viaInvite ? "Einladungslink" : "Partner-Formular"}`;
+    const planLabel = args.planType === "annual" ? "Jahresabo" : "Monatsabo";
+    const kind      = args.paymentNumber === 1 ? "Erste Zahlung" : `Verlängerung (Zahlung #${args.paymentNumber})`;
+    const provLine  = args.isDirect
+      ? `🏢 Direktvertrieb, keine Provision`
+      : `🤝 Provision: €${args.commissionAmount} (${Math.round(args.commissionRate * 100)}%)`;
 
     await sendTelegram(
-      `🆕 <b>${args.direct ? "Neuer Shop (Admin direkt)" : "Neuer Shop-Lead"}</b>\n\n` +
+      `💰 <b>Zahlung eingegangen</b>\n\n` +
       `🏪 <b>Shop:</b> ${escapeHtml(args.shopName)}\n` +
-      `👤 <b>Inhaber:</b> ${escapeHtml(args.ownerName)}` +
-      line("✉️", "E-Mail", args.ownerEmail) +
-      line("📞", "Telefon", args.ownerPhone) +
-      line("📍", "Stadt", args.city) +
-      line("🏷", "Branche", args.businessType) +
-      `\n💳 <b>Modell:</b> ${planLabel}` +
-      (args.rewardCount ? `\n🎁 <b>Bonusprogramm:</b> ${args.rewardCount} Belohnung(en)` : "") +
-      `\n\n` +
-      partnerBlock +
-      `\n\n⏳ Wartet auf Zahlung.`
+      `👤 <b>Inhaber:</b> ${escapeHtml(args.ownerName)}\n` +
+      `💳 <b>Betrag:</b> €${args.amount} (${planLabel}, ${kind})\n` +
+      provLine +
+      (args.wasPayLater ? `\n\n⏳→✔️ Der Shop hatte "Später zahlen" gewählt, jetzt erledigt.` : "")
     );
   },
 });
