@@ -228,6 +228,10 @@ export const sendWelcomeEmail = internalAction({
 // zeigt die echte Abrechnung. Mit Rabattcode: Normalpreise durchgestrichen
 // (Einrichtung 99 € → 45 € Aktionspreis) + Hinweis, dass das Angebot nur für
 // die erste Rechnung gilt.
+// Bei Zahlung #1 ist das gleichzeitig die Willkommens-Mail (Begrüßung,
+// Design-Hinweis, rechtliche Unterlagen): Der Inhaber bekommt genau EINE Mail,
+// und zwar erst nach Zahlungsabschluss. Beim Anlegen (auch "Später zahlen")
+// geht bewusst nichts raus.
 
 export const sendPaymentConfirmationEmail = internalAction({
   args: {
@@ -255,6 +259,7 @@ export const sendPaymentConfirmationEmail = internalAction({
     const planLabel   = args.planType === "annual" ? "Jahresabo" : "Monatsabo";
     const hasDiscount = !!args.discountCode;
     const renewal     = recurringPrice(args.planType, args.rewardCount);
+    const isFirst     = args.paymentNumber === 1;
 
     // Eine Rechnungszeile: bei Rabatt Normalpreis durchgestrichen + Aktionspreis in Gold
     const row = (label: string, list: number, paid: number) => `
@@ -305,6 +310,44 @@ export const sendPaymentConfirmationEmail = internalAction({
       "Alle Updates und neuen Funktionen inklusive",
     ];
 
+    // Willkommens-Teile: nur bei der ersten Zahlung (kombinierte Mail)
+    const designSection = isFirst ? `
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.7;">
+          Zu deinem Paket gehört ein <strong>individuelles Design</strong> deiner
+          Stempelkarte. Wir melden uns <strong>innerhalb der nächsten 24 Stunden</strong>
+          persönlich bei dir, damit deine Karte genauso aussieht, wie du es dir vorstellst.
+        </p>
+      </td>
+    </tr>` : "";
+
+    const legalSection = isFirst ? `
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#f2ede4;text-transform:uppercase;letter-spacing:1px;">
+              Bitte halte diese Angaben bereit
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Impressum (Firmenname, Inhaber, Anschrift, Kontakt)
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; AGB deines Shops (falls vorhanden)
+            </p>
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Datenschutzerkl&auml;rung bzw. Datenschutz-Kontakt
+            </p>
+            <p style="margin:12px 0 0 0;color:#8a8577;font-size:13px;line-height:1.6;">
+              Diese Angaben brauchen wir, damit deine Stempelkarte rechtlich sauber
+              online gehen kann. Kein Stress, wir gehen alles gemeinsam mit dir durch.
+            </p>
+          </td></tr>
+        </table>
+      </td>
+    </tr>` : "";
+
     const html = `
 <!DOCTYPE html>
 <html lang="de">
@@ -319,7 +362,7 @@ export const sendPaymentConfirmationEmail = internalAction({
     <tr>
       <td style="background:#0d0c0a;padding:28px 32px;text-align:center;">
         <p style="margin:0;color:#c9a227;font-size:24px;font-weight:900;letter-spacing:6px;">LOYALTYCARD</p>
-        <p style="margin:6px 0 0 0;color:rgba(242,237,228,0.45);font-size:12px;letter-spacing:2px;">ZAHLUNGSBEST&Auml;TIGUNG</p>
+        <p style="margin:6px 0 0 0;color:rgba(242,237,228,0.45);font-size:12px;letter-spacing:2px;">${isFirst ? "WILLKOMMEN &amp; ZAHLUNGSBEST&Auml;TIGUNG" : "ZAHLUNGSBEST&Auml;TIGUNG"}</p>
       </td>
     </tr>
 
@@ -327,11 +370,15 @@ export const sendPaymentConfirmationEmail = internalAction({
     <tr>
       <td style="padding:36px 32px 20px 32px;">
         <h1 style="margin:0 0 16px 0;font-size:22px;color:#f2ede4;font-weight:800;">
-          Zahlung erhalten, danke ${escapeHtml(args.ownerName)}!
+          ${isFirst ? `Herzlich willkommen, ${escapeHtml(args.ownerName)}!` : `Zahlung erhalten, danke ${escapeHtml(args.ownerName)}!`}
         </h1>
         <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.75;">
-          Deine Zahlung für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist eingegangen.
-          Hier deine Übersicht:
+          ${isFirst
+            ? `Schön, dass du dabei bist! Deine Zahlung für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist eingegangen
+               und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte schnell und reibungslos an den Start geht.
+               Hier deine Übersicht:`
+            : `Deine Zahlung für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist eingegangen.
+          Hier deine Übersicht:`}
         </p>
       </td>
     </tr>
@@ -373,6 +420,9 @@ export const sendPaymentConfirmationEmail = internalAction({
       </td>
     </tr>
 
+    ${designSection}
+    ${legalSection}
+
     <!-- Contact -->
     <tr>
       <td style="padding:0 32px 28px 32px;">
@@ -393,6 +443,10 @@ export const sendPaymentConfirmationEmail = internalAction({
     <!-- Closing -->
     <tr>
       <td style="padding:0 32px 32px 32px;border-top:1px solid #2a2620;">
+        ${isFirst ? `<p style="margin:24px 0 0 0;color:#cfc9bd;font-size:15px;line-height:1.75;">
+          Wir freuen uns darauf, gemeinsam mit dir mehr Stammkunden zu gewinnen.
+          Danke für dein Vertrauen!
+        </p>` : ""}
         <p style="margin:16px 0 0 0;color:#f2ede4;font-size:15px;font-weight:600;">
           Dein LoyaltyCard-Team
         </p>
@@ -418,9 +472,11 @@ export const sendPaymentConfirmationEmail = internalAction({
       hasDiscount && paid < list ? `- ${label}: ${eur(paid)} (statt ${eur(list)})` : `- ${label}: ${eur(paid)}`;
 
     const text = [
-      `Zahlung erhalten, danke ${args.ownerName}!`,
+      isFirst ? `Herzlich willkommen, ${args.ownerName}!` : `Zahlung erhalten, danke ${args.ownerName}!`,
       ``,
-      `Deine Zahlung für "${args.shopName}" ist eingegangen. Deine Übersicht:`,
+      isFirst
+        ? `Schön, dass du dabei bist! Deine Zahlung für "${args.shopName}" ist eingegangen und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte schnell und reibungslos an den Start geht. Deine Übersicht:`
+        : `Deine Zahlung für "${args.shopName}" ist eingegangen. Deine Übersicht:`,
       ``,
       textLine(`LoyaltyCard ${planLabel}`, args.aboList, args.aboPaid),
       ...(args.rewardCount > 0 ? [textLine(`Bonusprogramm (${args.rewardCount})`, args.rewardsList, args.rewardsPaid)] : []),
@@ -435,6 +491,16 @@ export const sendPaymentConfirmationEmail = internalAction({
       `Das alles ist enthalten:`,
       ...included.map(e => `- ${e}`),
       ``,
+      ...(isFirst ? [
+        `Zu deinem Paket gehört ein individuelles Design deiner Stempelkarte.`,
+        `Wir melden uns innerhalb der nächsten 24 Stunden persönlich bei dir.`,
+        ``,
+        `Bitte halte diese Angaben bereit:`,
+        `- Impressum (Firmenname, Inhaber, Anschrift, Kontakt)`,
+        `- AGB deines Shops (falls vorhanden)`,
+        `- Datenschutzerklärung bzw. Datenschutz-Kontakt`,
+        ``,
+      ] : []),
       `Fragen? WhatsApp oder Anruf: ${WHATSAPP_NR}`,
       ``,
       `Dein LoyaltyCard-Team`,
@@ -450,7 +516,9 @@ export const sendPaymentConfirmationEmail = internalAction({
       body: JSON.stringify({
         from:    FROM_EMAIL,
         to:      [args.ownerEmail],
-        subject: `Zahlung erhalten: ${args.shopName} (${eur(args.totalPaid)})`,
+        subject: isFirst
+          ? `Willkommen bei LoyaltyCard! Zahlung erhalten für ${args.shopName} (${eur(args.totalPaid)})`
+          : `Zahlung erhalten: ${args.shopName} (${eur(args.totalPaid)})`,
         html,
         text,
       }),

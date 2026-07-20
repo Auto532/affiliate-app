@@ -81,8 +81,10 @@ export const getByPaymentToken = query({
 });
 
 // ── "Später zahlen": Shop-Inhaber merkt die Zahlung zum späteren Abschluss vor ─
-// Der Link bleibt gültig; der Vertrag landet in der Admin-Liste (Analytics →
-// Finanzen) und der Admin bekommt eine Telegram-Nachricht.
+// Der Link bleibt gültig; der Vertrag landet in der Admin-Shop-Übersicht
+// (Kategorie "Zahlung offen") und der Admin bekommt eine Telegram-Nachricht.
+// Es geht dabei bewusst KEINE Mail an den Inhaber raus, die kombinierte
+// Willkommens-/Bestätigungs-Mail kommt erst nach Zahlungseingang.
 
 export const requestPayLater = mutation({
   args: { token: v.string() },

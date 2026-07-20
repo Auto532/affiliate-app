@@ -830,6 +830,43 @@ export const getPayLaterList = query({
   },
 });
 
+// ── Zahlungsstatus je Stempelkarten-Shop (für die Shop-Übersicht im Admin) ────
+// Liefert für jeden verknüpften Shop, ob die erste Zahlung noch offen ist,
+// inkl. fälligem Betrag (Rabatt eingerechnet) und "Später zahlen"-Vormerkung.
+
+export const getPayStatusForShops = query({
+  args: { adminSecret: v.string() },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+
+    const leads = (await ctx.db.query("shopLeads").collect())
+      .filter(l => l.loatycardShopId);
+
+    const rows = await Promise.all(leads.map(async lead => {
+      const contract = await ctx.db
+        .query("shopContracts")
+        .withIndex("by_shopLead", q => q.eq("shopLeadId", lead._id))
+        .unique();
+      if (!contract || contract.status !== "active") return null;
+
+      const rewardCount = contract.rewardCount ?? 0;
+      const amountDue   = contract.firstYearDiscount
+        ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
+        : invoiceTotal(contract.planType, rewardCount, true);
+
+      return {
+        loatycardShopId: lead.loatycardShopId!,
+        paid:            contract.paymentCount > 0,
+        payLater:        !!contract.payLaterAt,
+        amountDue:       contract.paymentCount > 0 ? 0 : amountDue,
+        paymentToken:    contract.paymentToken ?? "",
+      };
+    }));
+
+    return rows.filter(r => r !== null);
+  },
+});
+
 // Vormerkung entfernen (z.B. geklärt oder hinfällig). Nach Zahlungseingang
 // verschwindet der Eintrag automatisch (paymentCount > 0).
 export const clearPayLater = mutation({

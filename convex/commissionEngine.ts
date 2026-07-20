@@ -32,10 +32,13 @@ export function resolveCommissionRule(
     else                          phase = "year4_plus";
   }
 
+  // Modell seit 2026-07-20: Jahr 1 = 35%, ab Jahr 2 dauerhaft 15% (lifetime).
+  // Die Phasen year2/year3/year4_plus bleiben wegen bestehender DB-Einträge
+  // erhalten, haben aber alle dieselbe Rate.
   const rateMap: Record<CommissionPhase, number> = {
-    initial:    0.20,
-    year2:      0.05,
-    year3:      0.10,
+    initial:    0.35,
+    year2:      0.15,
+    year3:      0.15,
     year4_plus: 0.15,
   };
 
@@ -49,9 +52,9 @@ export function resolveCommissionRule(
 // Lesbare Bezeichnung für UI
 export function phaseLabel(phase: CommissionPhase, planType: "annual" | "monthly"): string {
   const labels: Record<CommissionPhase, string> = {
-    initial:    planType === "annual" ? "Jahr 1 (20%)" : "Jahr 1, M1–12 (20%)",
-    year2:      planType === "annual" ? "Jahr 2 (5%)"  : "Jahr 2, M13–24 (5%)",
-    year3:      planType === "annual" ? "Jahr 3 (10%)" : "Jahr 3, M25–36 (10%)",
+    initial:    planType === "annual" ? "Jahr 1 (35%)" : "Jahr 1, M1–12 (35%)",
+    year2:      planType === "annual" ? "Jahr 2 (15%)" : "Jahr 2, M13–24 (15%)",
+    year3:      planType === "annual" ? "Jahr 3 (15%)" : "Jahr 3, M25–36 (15%)",
     year4_plus: "Ab Jahr 4 (15%)",
   };
   return labels[phase];

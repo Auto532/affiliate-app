@@ -16,7 +16,7 @@ function nextCommission(planType: "annual" | "monthly", paymentCount: number) {
     planType === "annual"
       ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
       : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
-  const rates: Record<string, number> = { initial: 0.20, year2: 0.05, year3: 0.10, year4_plus: 0.15 };
+  const rates: Record<string, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
   const base   = planType === "annual" ? 240 : 20; // Provision nur auf den Abo-Anteil
   const amount = Math.round(base * rates[phase] * 100) / 100;
   return { amount, rate: rates[phase] };

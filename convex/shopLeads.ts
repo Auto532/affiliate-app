@@ -77,14 +77,8 @@ export const submitLead = mutation({
       note:       `${affiliate.name} · Plan: ${args.planType}`,
     });
 
-    await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
-      ownerEmail,
-      ownerName,
-      shopName,
-      planType:    args.planType,
-      rewardCount,
-    });
-
+    // Willkommens-Mail erst nach Zahlungseingang (autoRecordPayment) — wer
+    // noch nicht gezahlt hat (z.B. "Später zahlen"), bekommt noch keine Mail.
     await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
       shopName,
       ownerName,
@@ -198,16 +192,7 @@ export const acceptInvite = mutation({
       note:       `${args.ownerName} · Plan: ${planType}`,
     });
 
-    // Gleiche Willkommens-Mail wie beim Direktformular — der Abschluss über den
-    // Einladungslink ist derselbe Vertragsabschluss.
-    await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
-      ownerEmail,
-      ownerName,
-      shopName,
-      planType,
-      rewardCount,
-    });
-
+    // Willkommens-Mail erst nach Zahlungseingang (autoRecordPayment), siehe submitLead.
     const inviteAffiliate = await ctx.db.get(lead.affiliateId);
     await ctx.scheduler.runAfter(0, internal.notifications.notifyNewShopLead, {
       shopName,
