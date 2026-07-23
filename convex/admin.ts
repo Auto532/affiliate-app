@@ -1096,3 +1096,66 @@ export const getAffiliateDetail = query({
     };
   },
 });
+
+// Datengrundlage für die Provisionsabrechnung (PDF im Stempelkarten-Admin).
+// Liefert Partner-Stammdaten + itemisierte Provisionen (mit Shop-Name) + Summen.
+export const getPartnerCommissionStatement = query({
+  args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
+  handler: async (ctx, args) => {
+    requireAdmin(args.adminSecret);
+    const a = await ctx.db.get(args.affiliateId);
+    if (!a) return null;
+
+    const commissions = await ctx.db
+      .query("commissions")
+      .withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId))
+      .collect();
+
+    const rows = await Promise.all(commissions.map(async c => {
+      const contract = await ctx.db.get(c.shopContractId);
+      const lead     = contract ? await ctx.db.get(contract.shopLeadId) : null;
+      return {
+        date:          c.triggeredAt,
+        shopName:      lead?.shopName ?? "—",
+        planType:      c.planType,
+        paymentNumber: c.paymentNumber,
+        phase:         c.phase,
+        baseAmount:    c.baseAmount,
+        rate:          c.rate,
+        amount:        c.amount,
+        status:        c.status,
+      };
+    }));
+    rows.sort((x, y) => y.date - x.date);
+
+    const sum = (st: string) =>
+      Math.round(rows.filter(r => r.status === st).reduce((s, r) => s + r.amount, 0) * 100) / 100;
+    const pending = sum("pending"), confirmed = sum("confirmed"), paid = sum("paid"), canceled = sum("canceled");
+
+    return {
+      partner: {
+        name:         a.name,
+        company:      a.company ?? null,
+        referralCode: a.referralCode,
+        businessType: a.businessType ?? null,
+        address:      a.address ?? null,
+        zip:          a.zip ?? null,
+        city:         a.city ?? null,
+        country:      a.country ?? null,
+        email:        a.email,
+        phone:        a.phone ?? null,
+        taxId:        a.taxId ?? null,
+        vatId:        a.vatId ?? null,
+        bankIban:     a.bankIban ?? null,
+        bankBic:      a.bankBic ?? null,
+        bankName:     a.bankName ?? null,
+      },
+      rows,
+      totals: {
+        count:        rows.length,
+        pending, confirmed, paid, canceled,
+        payableTotal: Math.round((pending + confirmed + paid) * 100) / 100,
+      },
+    };
+  },
+});
