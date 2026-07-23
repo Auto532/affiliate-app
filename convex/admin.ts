@@ -5,6 +5,7 @@ import { recordPaymentCore } from "./payments";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
 import { recurringPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, applyDiscount, SETUP_FEE, REWARD_PRICE_PER_MONTH } from "./pricing";
+import { isCommissionPayable, commissionPayableAt } from "./commissionEngine";
 
 function requireAdmin(secret: string) {
   const expected = process.env.ADMIN_SECRET;
@@ -448,6 +449,15 @@ export const confirmCommission = mutation({
   args: { adminSecret: v.string(), commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
+    const c = await ctx.db.get(args.commissionId);
+    if (!c) throw new ConvexError("Provision nicht gefunden");
+    // 14 Tage Widerrufsfrist ab Zahlungsbestätigung (triggeredAt) einhalten.
+    if (!isCommissionPayable(c.triggeredAt)) {
+      const at = commissionPayableAt(c.triggeredAt);
+      throw new ConvexError(
+        `Provision erst nach der 14-tägigen Widerrufsfrist auszahlbar (frühestens ${new Date(at).toLocaleDateString("de-DE")}).`
+      );
+    }
     await ctx.db.patch(args.commissionId, {
       status:      "confirmed",
       confirmedAt: Date.now(),

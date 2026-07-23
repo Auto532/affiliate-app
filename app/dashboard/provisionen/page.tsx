@@ -66,6 +66,10 @@ export default function ProvisionsPage() {
         ))}
       </div>
 
+      <p className="text-[10px] text-[rgba(242,237,228,.4)] leading-relaxed px-1">
+        Provisionen werden 14 Tage nach der Zahlungsbestätigung des Shops zur Auszahlung freigegeben (gesetzliche Widerrufsfrist).
+      </p>
+
       {/* Privatperson-Grenze */}
       {isPrivate && (
         <div className="rounded-2xl p-4 space-y-2"
@@ -124,6 +128,13 @@ export default function ProvisionsPage() {
                 <span>·</span>
                 <span>{new Date(c.triggeredAt).toLocaleDateString("de-DE")}</span>
               </div>
+              {c.status === "pending" && (
+                <p className="text-[10px] mt-1.5 text-[rgba(242,237,228,.4)]">
+                  {(c as any).payable
+                    ? "Widerrufsfrist abgelaufen, zur Auszahlung freigegeben."
+                    : `Auszahlbar ab ${new Date((c as any).payableAt).toLocaleDateString("de-DE")} (14 Tage Widerrufsfrist)`}
+                </p>
+              )}
             </div>
           );
         })}

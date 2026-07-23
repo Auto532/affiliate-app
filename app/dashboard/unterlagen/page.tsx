@@ -261,7 +261,7 @@ const SECTIONS: Section[] = [
           { n: 2, t: "Zahlung", d: "Der Inhaber zahlt über den Zahlungslink (Karte oder SEPA). Den Link findest du beim Shop unter ‚Meine Shops'. Vor der Zahlung bekommt er bewusst noch keine E-Mail." },
           { n: 3, t: "Willkommens-Mail", d: "Direkt nach der Zahlung bekommt der Inhaber automatisch EINE Mail: Willkommen, Zahlungsübersicht und die Liste der Unterlagen (Impressum und Co.)." },
           { n: 4, t: "Automatische Einrichtung", d: "Mit der Zahlung wird die Stempelkarte automatisch angelegt. Wir melden uns innerhalb von 24 Stunden für Design und Einrichtung." },
-          { n: 5, t: "Deine Provision", d: "Erscheint sofort unter ‚Provisionen' und wird nach Bestätigung per SEPA ausgezahlt." },
+          { n: 5, t: "Deine Provision", d: "Erscheint sofort unter ‚Provisionen'. Ausgezahlt wird sie per SEPA nach der 14-tägigen Widerrufsfrist ab Zahlungsbestätigung des Shops." },
         ].map(s => (
           <div key={s.n} className="flex gap-3 rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
             <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold"

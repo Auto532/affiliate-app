@@ -2,6 +2,18 @@
 
 import { planPrice } from "./pricing";
 
+// Widerrufsfrist: Eine Provision wird erst 14 Tage nach der Zahlungsbestätigung
+// des Shops (commission.triggeredAt = Zahlungseingang) zur Auszahlung
+// freigegeben. Vorher kann sie nicht bestätigt/ausgezahlt werden.
+export const WIDERRUF_DAYS = 14;
+export const WIDERRUF_MS = WIDERRUF_DAYS * 24 * 60 * 60 * 1000;
+export function commissionPayableAt(triggeredAt: number): number {
+  return triggeredAt + WIDERRUF_MS;
+}
+export function isCommissionPayable(triggeredAt: number, now: number = Date.now()): boolean {
+  return now >= triggeredAt + WIDERRUF_MS;
+}
+
 export type CommissionPhase = "initial" | "year2" | "year3" | "year4_plus";
 
 interface CommissionRule {

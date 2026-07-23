@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireValidEmail, requireFilled } from "./validation";
+import { commissionPayableAt, isCommissionPayable } from "./commissionEngine";
 
 async function requireAffiliate(ctx: any, token: string) {
   const session = await ctx.db
@@ -244,7 +245,13 @@ export const myCommissions = query({
     const result = await Promise.all(commissions.map(async c => {
       const contract = await ctx.db.get(c.shopContractId);
       const lead     = contract ? await ctx.db.get(contract.shopLeadId) : null;
-      return { ...c, shopName: lead?.shopName ?? "—" };
+      // Auszahlbar erst nach 14 Tagen Widerrufsfrist ab Zahlungsbestätigung.
+      return {
+        ...c,
+        shopName:  lead?.shopName ?? "—",
+        payableAt: commissionPayableAt(c.triggeredAt),
+        payable:   isCommissionPayable(c.triggeredAt),
+      };
     }));
 
     return result;
