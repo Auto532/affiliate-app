@@ -356,6 +356,7 @@ export const getLeadForContract = internalQuery({
     if (!contract) return null;
     const lead = await ctx.db.get(contract.shopLeadId);
     if (!lead) return null;
+    const affiliate = await ctx.db.get(contract.affiliateId);
     return {
       leadId:           lead._id,
       shopName:         lead.shopName,
@@ -367,6 +368,9 @@ export const getLeadForContract = internalQuery({
       loatycardShopId:  lead.loatycardShopId,
       planType:         contract.planType,
       rewardCount:      contract.rewardCount ?? 0,
+      isDirect:         contract.isDirect === true,
+      affiliateName:    affiliate?.name ?? null,
+      affiliateCode:    affiliate?.referralCode ?? null,
     };
   },
 });
@@ -419,6 +423,10 @@ export const provisionShop = internalAction({
     const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${escapeHtml(lead.ownerPhone)}`   : "";
     const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${escapeHtml(lead.city)}`            : "";
     const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${escapeHtml(lead.businessType)}` : "";
+    const partnerLine = lead.isDirect
+      ? `\n🤝 <b>Verkauft von:</b> Direktvertrieb`
+      : `\n🤝 <b>Verkauft von:</b> ${escapeHtml(lead.affiliateName ?? "—")}` +
+        (lead.affiliateCode ? ` (${escapeHtml(lead.affiliateCode)})` : "");
 
     await sendTelegram(
       `🏪 <b>Neuer Shop ist live!</b>\n\n` +
@@ -428,7 +436,7 @@ export const provisionShop = internalAction({
       `<b>Modell:</b> ${planLabel}${bonusLabel}\n\n` +
       `👤 <b>Inhaber:</b> ${escapeHtml(lead.ownerName)}\n` +
       `✉️ <b>E-Mail:</b> ${escapeHtml(lead.ownerEmail)}` +
-      phoneLine + cityLine + branchLine +
+      phoneLine + cityLine + branchLine + partnerLine +
       `\n\n⚙️ Design &amp; Bonusprogramm einrichten nicht vergessen!`
     );
   },

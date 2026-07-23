@@ -20,6 +20,7 @@ import type * as passwords from "../passwords.js";
 import type * as payments from "../payments.js";
 import type * as pricing from "../pricing.js";
 import type * as rateLimit from "../rateLimit.js";
+import type * as seed from "../seed.js";
 import type * as shopLeads from "../shopLeads.js";
 import type * as support from "../support.js";
 import type * as testPayments from "../testPayments.js";
@@ -44,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   payments: typeof payments;
   pricing: typeof pricing;
   rateLimit: typeof rateLimit;
+  seed: typeof seed;
   shopLeads: typeof shopLeads;
   support: typeof support;
   testPayments: typeof testPayments;
