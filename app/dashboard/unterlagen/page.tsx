@@ -169,6 +169,7 @@ const SECTIONS: Section[] = [
           <><b>Kein App-Download:</b> läuft im Browser, ein QR-Scan reicht. Das größte Gegenargument gegen „digital" fällt weg.</>,
           <><b>Karte ist immer dabei:</b> nichts geht verloren, nichts wird vergessen oder durchgewaschen.</>,
           <><b>Der Betrieb sieht endlich Daten:</b> wer kommt wie oft, was wird eingelöst, wer sind die Top-Kunden.</>,
+          <><b>Beleg, dass es sich lohnt:</b> ein professioneller Bericht zeigt vergebene Stempel, eingelöste Belohnungen und den Umsatz aus den Stempeln. Schwarz auf weiß, kein Bauchgefühl.</>,
           <><b>Bonus-Stufen & Meilensteine:</b> mehrstufige Belohnungen bringen Kunden messbar öfter zurück als „10 Stempel = 1 gratis".</>,
           <><b>Einrichtung ohne Aufwand:</b> LoyaltyCard richtet alles ein, der Betrieb stellt nur den QR-Code auf.</>,
           <><b>Eigenes Design:</b> mit Logo und Farben fühlt es sich wie die eigene App des Ladens an.</>,
@@ -191,6 +192,8 @@ const SECTIONS: Section[] = [
           a="Das Jahresabo kostet keine 70 Cent pro Tag. Wenn dadurch nur ein einziger Kunde pro Woche einmal öfter kommt, hat es sich mehrfach bezahlt. Rechnen Sie es an Ihrem Durchschnittsbon durch." />
         <Einwand e="Meine Papierkarten funktionieren doch."
           a="Wie viele kommen tatsächlich voll zurück? Die meisten landen in der Waschmaschine oder im Müll. Und: Papier sagt Ihnen nicht, wer Ihre Stammkunden sind. Die digitale Karte schon." />
+        <Einwand e="Bringt mir das überhaupt was?"
+          a="Das sehen Sie selbst, jederzeit. Sie bekommen einen sauberen Bericht mit Ihren Zahlen: vergebene Stempel, eingelöste Belohnungen und der Umsatz, den die Stempel gebracht haben. Kein Bauchgefühl, sondern belegbar." />
         <Einwand e="Meine Kunden sind nicht so digital."
           a="Es gibt nichts zu installieren. QR-Code scannen kennt seit der Speisekarte jeder. Und für die Übergangszeit können Sie Papier einfach parallel weiterlaufen lassen." />
         <Einwand e="Ich habe keine Zeit, mich darum zu kümmern."
