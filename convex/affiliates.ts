@@ -1,3 +1,4 @@
+import { affiliateSessionOrNull, requireAffiliateSession, sanitizeAffiliate } from "./affiliateAuth";
 import { mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
@@ -151,15 +152,15 @@ export const login = mutation({
     const ok = affiliate !== null && await verifyPassword(ctx, affiliate, args.passwordHash);
     if (!ok) {
       await recordFailure(ctx, throttleKey, throttle);
-      throw new ConvexError("Ungültige Zugangsdaten");
+      return { ok: false as const, error: "Ungültige Zugangsdaten" };
     }
     await clearFailures(ctx, throttle);
 
     const aff = affiliate!;
     if (aff.status === "pending")
-      throw new ConvexError("Dein Account wartet noch auf Freigabe");
+      return { ok: false as const, error: "Dein Account wartet noch auf Freigabe" };
     if (aff.status === "suspended")
-      throw new ConvexError("Dein Account wurde gesperrt");
+      return { ok: false as const, error: "Dein Account wurde gesperrt" };
 
     const token = crypto.randomUUID();
     const now   = Date.now();
@@ -170,7 +171,7 @@ export const login = mutation({
       expiresAt:   now + 30 * 24 * 60 * 60 * 1000, // 30 Tage
     });
 
-    return { token, affiliate: aff };
+    return { ok: true as const, token, affiliate: sanitizeAffiliate(aff) };
   },
 });
 
@@ -179,38 +180,11 @@ export const login = mutation({
 export const me = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) return null;
-    return ctx.db.get(session.affiliateId);
+    const affiliate = await affiliateSessionOrNull(ctx, args.token);
+    if (!affiliate) return null;
+    return sanitizeAffiliate(affiliate);
   },
 });
-
-// ── Bankdaten speichern ───────────────────────────────────────────────────────
-
-export const updateBankDetails = mutation({
-  args: {
-    token:    v.string(),
-    bankIban: v.string(),
-    bankName: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
-
-    await ctx.db.patch(session.affiliateId, {
-      bankIban: args.bankIban,
-      bankName: args.bankName,
-    });
-  },
-});
-
-// ── Eigenes Profil (Partner-Bereich) ─────────────────────────────────────────
 
 // Sensible Felder brauchen Admin-Freigabe; die restlichen werden sofort übernommen.
 const SENSITIVE_PROFILE_FIELDS = [
@@ -218,29 +192,12 @@ const SENSITIVE_PROFILE_FIELDS = [
 ] as const;
 const IMMEDIATE_PROFILE_FIELDS = ["phone", "address", "zip", "city", "country"] as const;
 
-async function affiliateFromToken(ctx: MutationCtx, token: string): Promise<Doc<"affiliates">> {
-  const session = await ctx.db
-    .query("affiliateSessions")
-    .withIndex("by_token", q => q.eq("token", token))
-    .unique();
-  if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
-  const affiliate = await ctx.db.get(session.affiliateId);
-  if (!affiliate) throw new ConvexError("Account nicht gefunden");
-  return affiliate;
-}
-
 export const getMyProfile = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) return null;
-    const a = await ctx.db.get(session.affiliateId);
-    if (!a) return null;
-    const { passwordHash: _p, passwordSalt: _s, ...profile } = a;
-    return profile;
+    const affiliate = await affiliateSessionOrNull(ctx, args.token);
+    if (!affiliate) return null;
+    return sanitizeAffiliate(affiliate);
   },
 });
 
@@ -265,7 +222,7 @@ export const updateOwnProfile = mutation({
     businessType: v.optional(v.union(v.literal("private"), v.literal("business"))),
   },
   handler: async (ctx, args) => {
-    const affiliate = await affiliateFromToken(ctx, args.token);
+    const affiliate = await requireAffiliateSession(ctx, args.token);
 
     const patch: Record<string, unknown> = {};
     for (const k of IMMEDIATE_PROFILE_FIELDS) {
@@ -426,13 +383,10 @@ export const acceptAffiliateInvite = mutation({
 export const getDashboard = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) return null;
+    const affiliate = await affiliateSessionOrNull(ctx, args.token);
+    if (!affiliate) return null;
 
-    const affiliateId = session.affiliateId;
+    const affiliateId = affiliate._id;
 
     const leads = await ctx.db
       .query("shopLeads")

@@ -25,7 +25,9 @@ export default function LoginPage() {
     setError(""); setLoading(true);
     try {
       const passwordHash = await hashPassword(password);
-      const { token } = await login({ email, passwordHash });
+      const result = await login({ email, passwordHash });
+      if (!result.ok) { setError(result.error); return; }
+      const { token } = result;
       localStorage.setItem("affiliate_token", token);
       router.push("/dashboard");
     } catch (err: any) {

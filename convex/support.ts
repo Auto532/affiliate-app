@@ -1,5 +1,5 @@
-import { mutation, query, internalAction } from "./_generated/server";
-import type { QueryCtx } from "./_generated/server";
+import { mutation, query, internalAction, internalMutation } from "./_generated/server";
+import { affiliateSessionOrNull, requireAffiliateSession } from "./affiliateAuth";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { escapeHtml } from "./htmlEscape";
@@ -21,19 +21,19 @@ export const submitTicket = mutation({
     contact: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
-    const affiliate = await ctx.db.get(session.affiliateId);
-    if (!affiliate) throw new ConvexError("Account nicht gefunden");
+    const affiliate = await requireAffiliateSession(ctx, args.token);
 
     const message = args.message.trim();
     if (!message) throw new ConvexError("Bitte beschreibe dein Anliegen");
     if (message.length > 2000) throw new ConvexError("Nachricht zu lang (max. 2000 Zeichen)");
 
+    const recent = await ctx.db.query("supportTickets")
+      .withIndex("by_affiliate_createdAt", q => q.eq("affiliateId", affiliate._id).gt("createdAt", Date.now() - 60 * 60 * 1000))
+      .take(5);
+    if (recent.length >= 5) throw new ConvexError("Du kannst maximal 5 Support-Anfragen pro Stunde erstellen. Bitte versuche es später erneut.");
+    const latest = await ctx.db.query("supportTickets").withIndex("by_number").order("desc").first();
     await ctx.db.insert("supportTickets", {
+      number: (latest?.number ?? 0) + 1,
       affiliateId: affiliate._id, message,
       contact: args.contact?.trim() || undefined,
       status: "open", createdAt: Date.now(),
@@ -59,29 +59,32 @@ function buildThread(t: { message: string; createdAt: number; reply?: string; re
 
 // Fortlaufende Ticketnummern (#001 = ältestes Ticket, app-weit — Admin und
 // Absender sehen dieselbe Nummer)
-async function ticketNumbers(ctx: QueryCtx): Promise<Map<string, number>> {
-  const all = await ctx.db.query("supportTickets").collect();
-  all.sort((a, b) => a.createdAt - b.createdAt);
-  return new Map(all.map((t, i) => [t._id as string, i + 1]));
-}
+export const backfillTicketNumbers = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const latest = await ctx.db.query("supportTickets").withIndex("by_number").order("desc").first();
+    let number = latest?.number ?? 0;
+    // Bestehende Nummern bleiben stabil; fehlende werden in Erstellungsreihenfolge ergänzt.
+    const tickets = await ctx.db.query("supportTickets").order("asc").collect();
+    tickets.sort((a, b) => a.createdAt - b.createdAt || a._creationTime - b._creationTime);
+    for (const ticket of tickets) {
+      if (ticket.number === undefined) await ctx.db.patch(ticket._id, { number: ++number });
+    }
+  },
+});
 
-// Eigene Anfragen des Partners (kompletter Verlauf + Status)
 export const listMyTickets = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) return null;
-    const numbers = await ticketNumbers(ctx);
+    const affiliate = await affiliateSessionOrNull(ctx, args.token);
+    if (!affiliate) return null;
     const tickets = await ctx.db
       .query("supportTickets")
-      .withIndex("by_affiliate", q => q.eq("affiliateId", session.affiliateId))
+      .withIndex("by_affiliate", q => q.eq("affiliateId", affiliate._id))
       .collect();
     return tickets
       .sort((a, b) => b.createdAt - a.createdAt)
-      .map(t => ({ _id: t._id, number: numbers.get(t._id as string) ?? 0, status: t.status, createdAt: t.createdAt, thread: buildThread(t) }));
+      .map(t => ({ _id: t._id, number: t.number ?? 0, status: t.status, createdAt: t.createdAt, thread: buildThread(t) }));
   },
 });
 
@@ -89,14 +92,9 @@ export const listMyTickets = query({
 export const replyTicket = mutation({
   args: { token: v.string(), ticketId: v.id("supportTickets"), message: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
-    const affiliate = await ctx.db.get(session.affiliateId);
+    const affiliate = await requireAffiliateSession(ctx, args.token);
     const ticket = await ctx.db.get(args.ticketId);
-    if (!ticket || ticket.affiliateId !== session.affiliateId) throw new ConvexError("Ticket nicht gefunden");
+    if (!ticket || ticket.affiliateId !== affiliate._id) throw new ConvexError("Ticket nicht gefunden");
     const message = args.message.trim();
     if (!message) throw new ConvexError("Nachricht ist leer");
     if (message.length > 2000) throw new ConvexError("Nachricht zu lang (max. 2000 Zeichen)");
@@ -119,12 +117,11 @@ export const adminListTickets = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, { adminSecret }) => {
     requireAdmin(adminSecret);
-    const numbers = await ticketNumbers(ctx);
     const tickets = await ctx.db.query("supportTickets").order("desc").collect();
     return Promise.all(tickets.map(async t => {
       const a = await ctx.db.get(t.affiliateId);
       return {
-        _id: t._id, number: numbers.get(t._id as string) ?? 0,
+        _id: t._id, number: t.number ?? 0,
         contact: t.contact ?? null, status: t.status, createdAt: t.createdAt,
         partnerName: a?.name ?? "(gelöschter Partner)", partnerEmail: a?.email ?? null,
         thread: buildThread(t),

@@ -90,7 +90,7 @@ export default function SupportPage() {
           <p className="text-xs font-semibold text-[rgba(242,237,228,.45)] uppercase tracking-wider">Deine Anfragen</p>
           {myTickets.map(t => {
             const isTOpen = t.status === "open" || !!expandedT[t._id];
-            const num = `#${String(t.number).padStart(3, "0")}`;
+            const num = t.number > 0 ? `#${String(t.number).padStart(3, "0")}` : "Ohne Nummer";
             if (!isTOpen) {
               // Abgeschlossen: nur Nummer — Klick öffnet den Verlauf
               return (

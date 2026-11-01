@@ -1,3 +1,4 @@
+import { sanitizeAffiliate } from "./affiliateAuth";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
@@ -134,7 +135,7 @@ export const listAffiliates = query({
     requireAdmin(args.adminSecret);
     // System-Partner "Direktvertrieb" (Admin-Shops) nicht in der Partner-Liste zeigen
     const all = await ctx.db.query("affiliates").collect();
-    return all.filter(a => a.referralCode !== "DIRECT");
+    return all.filter(a => a.referralCode !== "DIRECT").map(sanitizeAffiliate);
   },
 });
 
@@ -275,6 +276,9 @@ export const suspendAffiliate = mutation({
   handler: async (ctx, args) => {
     requireAdmin(args.adminSecret);
     await ctx.db.patch(args.affiliateId, { status: "suspended" });
+    const sessions = await ctx.db.query("affiliateSessions")
+      .withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId)).collect();
+    for (const session of sessions) await ctx.db.delete(session._id);
     await ctx.db.insert("auditLog", {
       entityType: "affiliate",
       entityId:   args.affiliateId,
@@ -322,7 +326,8 @@ export const getPendingLeads = query({
 
     return Promise.all(leads.map(async lead => {
       const affiliate = await ctx.db.get(lead.affiliateId);
-      return { ...lead, affiliateName: affiliate?.name ?? "—", affiliateCode: affiliate?.referralCode ?? "—" };
+      const { loatycardAdminToken: _adminToken, ...safeLead } = lead;
+      return { ...safeLead, affiliateName: affiliate?.name ?? "—", affiliateCode: affiliate?.referralCode ?? "—" };
     }));
   },
 });
@@ -336,7 +341,8 @@ export const getAllLeads = query({
     const partnerLeads = leads.filter(l => l.source !== "admin_direct");
     return Promise.all(partnerLeads.map(async lead => {
       const affiliate = await ctx.db.get(lead.affiliateId);
-      return { ...lead, affiliateName: affiliate?.name ?? "—" };
+      const { loatycardAdminToken: _adminToken, ...safeLead } = lead;
+      return { ...safeLead, affiliateName: affiliate?.name ?? "—" };
     }));
   },
 });
@@ -1070,7 +1076,7 @@ export const getAffiliateDetail = query({
     requireAdmin(args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
     if (!a) return null;
-    const { passwordHash: _p, passwordSalt: _s, ...affiliate } = a;
+    const affiliate = sanitizeAffiliate(a);
 
     const [leads, commissions, payouts] = await Promise.all([
       ctx.db.query("shopLeads").withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId)).order("desc").collect(),

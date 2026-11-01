@@ -1,20 +1,8 @@
+import { affiliateSessionOrNull, requireAffiliateSession } from "./affiliateAuth";
 import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireValidEmail, requireFilled } from "./validation";
 import { commissionPayableAt, isCommissionPayable } from "./commissionEngine";
-
-async function requireAffiliate(ctx: any, token: string) {
-  const session = await ctx.db
-    .query("affiliateSessions")
-    .withIndex("by_token", (q: any) => q.eq("token", token))
-    .unique();
-  if (!session || session.expiresAt < Date.now()) throw new ConvexError("Nicht eingeloggt");
-  const affiliate = await ctx.db.get(session.affiliateId);
-  if (!affiliate || affiliate.status !== "active") throw new ConvexError("Kein Zugriff");
-  return affiliate;
-}
-
-// ── Shop einreichen (Direktformular) ─────────────────────────────────────────
 
 export const submitLead = mutation({
   args: {
@@ -29,7 +17,7 @@ export const submitLead = mutation({
     rewardCount:      v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const affiliate = await requireAffiliate(ctx, args.token);
+    const affiliate = await requireAffiliateSession(ctx, args.token);
 
     const shopName   = requireFilled(args.shopName, "Shop-Name");
     const ownerName  = requireFilled(args.ownerName, "Inhaber-Name");
@@ -84,7 +72,7 @@ export const submitLead = mutation({
 export const generateInviteLink = mutation({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const affiliate = await requireAffiliate(ctx, args.token);
+    const affiliate = await requireAffiliateSession(ctx, args.token);
 
     const inviteToken = crypto.randomUUID();
     const expiresAt   = Date.now() + 7 * 24 * 60 * 60 * 1000; // 7 Tage
@@ -179,7 +167,7 @@ export const acceptInvite = mutation({
 export const deletePendingLead = mutation({
   args: { token: v.string(), leadId: v.id("shopLeads") },
   handler: async (ctx, args) => {
-    const affiliate = await requireAffiliate(ctx, args.token);
+    const affiliate = await requireAffiliateSession(ctx, args.token);
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new ConvexError("Shop nicht gefunden");
     if (lead.affiliateId !== affiliate._id) throw new ConvexError("Kein Zugriff");
@@ -199,15 +187,12 @@ export const deletePendingLead = mutation({
 export const myLeads = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) return null;
+    const affiliate = await affiliateSessionOrNull(ctx, args.token);
+    if (!affiliate) return null;
 
     const leads = await ctx.db
       .query("shopLeads")
-      .withIndex("by_affiliate", q => q.eq("affiliateId", session.affiliateId))
+      .withIndex("by_affiliate", q => q.eq("affiliateId", affiliate._id))
       .order("desc")
       .collect();
 
@@ -218,7 +203,10 @@ export const myLeads = query({
             .withIndex("by_shopLead", q => q.eq("shopLeadId", lead._id))
             .unique()
         : null;
-      return { ...lead, contract };
+      // Login-Schlüssel des Shops gehört nicht in den Partner-Browser. Der
+      // paymentToken bleibt: der Partner schickt dem Inhaber den Zahlungslink.
+      const { loatycardAdminToken: _adminToken, inviteToken: _inviteToken, ...safeLead } = lead;
+      return { ...safeLead, contract };
     }));
 
     return result;
@@ -230,15 +218,12 @@ export const myLeads = query({
 export const myCommissions = query({
   args: { token: v.string() },
   handler: async (ctx, args) => {
-    const session = await ctx.db
-      .query("affiliateSessions")
-      .withIndex("by_token", q => q.eq("token", args.token))
-      .unique();
-    if (!session || session.expiresAt < Date.now()) return null;
+    const affiliate = await affiliateSessionOrNull(ctx, args.token);
+    if (!affiliate) return null;
 
     const commissions = await ctx.db
       .query("commissions")
-      .withIndex("by_affiliate", q => q.eq("affiliateId", session.affiliateId))
+      .withIndex("by_affiliate", q => q.eq("affiliateId", affiliate._id))
       .order("desc")
       .collect();
 
