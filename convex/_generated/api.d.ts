@@ -9,6 +9,7 @@
  */
 
 import type * as admin from "../admin.js";
+import type * as adminAuth from "../adminAuth.js";
 import type * as affiliateAuth from "../affiliateAuth.js";
 import type * as affiliates from "../affiliates.js";
 import type * as commissionEngine from "../commissionEngine.js";
@@ -34,6 +35,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
+  adminAuth: typeof adminAuth;
   affiliateAuth: typeof affiliateAuth;
   affiliates: typeof affiliates;
   commissionEngine: typeof commissionEngine;

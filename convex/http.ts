@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
+import { isValidBridgeSecret } from "./adminAuth";
 
 const http = httpRouter();
 
@@ -27,9 +28,10 @@ http.route({
   method:  "POST",
   handler: httpAction(async (ctx, req) => {
     const body = await req.json();
-    const { adminPin, loatycardShopId, rewardCount } = body;
+    const { secret, loatycardShopId, rewardCount } = body;
 
-    if (!adminPin || adminPin !== process.env.ADMIN_SECRET) {
+    // Eigener Brücken-Schlüssel statt Admin-PIN (BRIDGE_SECRET in beiden Apps)
+    if (!isValidBridgeSecret(secret)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
         headers: { "Content-Type": "application/json" },

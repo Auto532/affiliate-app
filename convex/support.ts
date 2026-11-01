@@ -3,12 +3,8 @@ import { affiliateSessionOrNull, requireAffiliateSession } from "./affiliateAuth
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { escapeHtml } from "./htmlEscape";
+import { requireAdmin } from "./adminAuth";
 
-function requireAdmin(secret: string) {
-  const expected = process.env.ADMIN_SECRET;
-  if (!expected) throw new ConvexError("ADMIN_SECRET nicht gesetzt");
-  if (secret !== expected) throw new ConvexError("Kein Zugriff");
-}
 
 // Support-Anfrage vom Partner (auth via Session-Token). Wird gespeichert +
 // per Telegram an den Admin geschickt (derselbe Bot wie bei Shop-Leads;
@@ -116,7 +112,7 @@ export const replyTicket = mutation({
 export const adminListTickets = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, { adminSecret }) => {
-    requireAdmin(adminSecret);
+    await requireAdmin(ctx, adminSecret);
     const tickets = await ctx.db.query("supportTickets").order("desc").collect();
     return Promise.all(tickets.map(async t => {
       const a = await ctx.db.get(t.affiliateId);
@@ -139,7 +135,7 @@ export const adminAnswerTicket = mutation({
     status:      v.optional(v.union(v.literal("open"), v.literal("done"))),
   },
   handler: async (ctx, { adminSecret, ticketId, reply, status }) => {
-    requireAdmin(adminSecret);
+    await requireAdmin(ctx, adminSecret);
     const ticket = await ctx.db.get(ticketId);
     if (!ticket) throw new ConvexError("Ticket nicht gefunden");
     const patch: Record<string, unknown> = {};

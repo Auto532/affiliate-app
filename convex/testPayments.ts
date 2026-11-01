@@ -26,10 +26,9 @@ export const simulateTestPayment = action({
     if (process.env.TEST_PAYMENTS_ENABLED !== "true") {
       throw new ConvexError("Testzahlungen sind deaktiviert");
     }
-    const expected = process.env.ADMIN_SECRET;
-    if (!expected || args.adminSecret !== expected) {
-      throw new ConvexError("Nicht autorisiert");
-    }
+    // PIN mit Fehlversuch-Sperre prüfen (wie beim Admin-Login)
+    const check = await ctx.runMutation(internal.admin.verifyAdminPin, { pin: args.adminSecret });
+    if (!check.ok) throw new ConvexError(check.error);
 
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new ConvexError("Ungültiger Zahlungslink");

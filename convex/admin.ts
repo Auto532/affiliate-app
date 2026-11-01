@@ -1,5 +1,8 @@
 import { sanitizeAffiliate } from "./affiliateAuth";
+import { ADMIN_SESSION_MS, isValidAdminPin, newSessionToken, requireAdmin } from "./adminAuth";
+import { assertNotLocked, recordFailure, clearFailures } from "./rateLimit";
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
 import { recordPaymentCore } from "./payments";
@@ -8,20 +11,69 @@ import { isValidEmail } from "./validation";
 import { recurringPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, applyDiscount, SETUP_FEE, REWARD_PRICE_PER_MONTH } from "./pricing";
 import { isCommissionPayable, commissionPayableAt } from "./commissionEngine";
 
-function requireAdmin(secret: string) {
-  const expected = process.env.ADMIN_SECRET;
-  // Kein unsicherer Default: ist das Secret nicht gesetzt, wird jeder Zugriff
-  // verweigert (statt auf ein rate-bares "changeme" zurückzufallen).
-  if (!expected) throw new ConvexError("ADMIN_SECRET nicht gesetzt");
-  if (secret !== expected) throw new ConvexError("Kein Zugriff");
+// ── Admin-Login (PIN → Sitzungs-Schlüssel) ──────────────────────────────────
+// Fehler werden ZURÜCKGEGEBEN statt geworfen: ein throw rollt in Convex alle
+// Schreibvorgänge zurück, dann würde der Fehlversuch nie gezählt.
+
+async function checkAdminPinThrottled(ctx: MutationCtx, pin: string) {
+  if (!process.env.ADMIN_SECRET) throw new ConvexError("ADMIN_SECRET nicht gesetzt");
+  let throttle;
+  try {
+    throttle = await assertNotLocked(ctx, "admin-pin");
+  } catch (err) {
+    return { ok: false as const, error: err instanceof ConvexError ? String(err.data) : "Gesperrt" };
+  }
+  if (!isValidAdminPin(pin)) {
+    await recordFailure(ctx, "admin-pin", throttle);
+    return { ok: false as const, error: "Falscher PIN" };
+  }
+  await clearFailures(ctx, throttle);
+  return { ok: true as const };
 }
 
+// Für die Test-Zahlung (Action ohne DB-Zugriff): PIN mit derselben Sperre prüfen
+export const verifyAdminPin = internalMutation({
+  args: { pin: v.string() },
+  handler: async (ctx, args) => checkAdminPinThrottled(ctx, args.pin),
+});
+
+export const adminLogin = mutation({
+  args: { pin: v.string() },
+  handler: async (ctx, args) => {
+    const check = await checkAdminPinThrottled(ctx, args.pin);
+    if (!check.ok) return check;
+
+    // Abgelaufene Sitzungen nebenbei aufräumen (begrenzt)
+    const now = Date.now();
+    const expired = await ctx.db.query("adminSessions")
+      .withIndex("by_expiresAt", q => q.lt("expiresAt", now))
+      .take(50);
+    for (const s of expired) await ctx.db.delete(s._id);
+
+    const token = newSessionToken();
+    await ctx.db.insert("adminSessions", { token, createdAt: now, expiresAt: now + ADMIN_SESSION_MS });
+    return { ok: true as const, token };
+  },
+});
+
+export const adminLogout = mutation({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    const session = await ctx.db.query("adminSessions")
+      .withIndex("by_token", q => q.eq("token", args.token))
+      .unique();
+    if (session) await ctx.db.delete(session._id);
+  },
+});
+
 // ── Alle Daten löschen (Test-Reset) ──────────────────────────────────────────
+// Braucht eine gültige Sitzung UND den PIN erneut (Fehlklick-Schutz).
 
 export const clearAllData = mutation({
-  args: { adminSecret: v.string() },
+  args: { adminSecret: v.string(), pin: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
+    if (!isValidAdminPin(args.pin)) throw new ConvexError("Falscher PIN");
     const tables = [
       "commissions", "payouts", "shopContracts", "shopLeads",
       "affiliateSessions", "adminSessions", "affiliateInvites",
@@ -42,7 +94,7 @@ export const clearAllData = mutation({
 export const generateAffiliateInvite = mutation({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const token     = crypto.randomUUID();
     const now       = Date.now();
     await ctx.db.insert("affiliateInvites", {
@@ -77,7 +129,7 @@ export const createAffiliate = mutation({
     notes:        v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const existing = await ctx.db.query("affiliates").withIndex("by_email", q => q.eq("email", args.email)).unique();
     if (existing) throw new ConvexError("E-Mail bereits registriert");
@@ -132,7 +184,7 @@ export const createAffiliate = mutation({
 export const listAffiliates = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     // System-Partner "Direktvertrieb" (Admin-Shops) nicht in der Partner-Liste zeigen
     const all = await ctx.db.query("affiliates").collect();
     return all.filter(a => a.referralCode !== "DIRECT").map(sanitizeAffiliate);
@@ -183,7 +235,7 @@ export const createDirectShopContract = mutation({
     loatycardAdminToken: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     // Gleiche Inhaber-E-Mail für mehrere Shops ist erlaubt (ein Inhaber kann
     // mehrere Läden haben) — eindeutig sein müssen nur Endkunden pro Shop.
@@ -245,7 +297,7 @@ export const createDirectShopContract = mutation({
 export const approveAffiliate = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const affiliate = await ctx.db.get(args.affiliateId);
     if (!affiliate) throw new ConvexError("Partner nicht gefunden");
     const wasPending = affiliate.status === "pending";
@@ -274,7 +326,7 @@ export const approveAffiliate = mutation({
 export const suspendAffiliate = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates"), note: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     await ctx.db.patch(args.affiliateId, { status: "suspended" });
     const sessions = await ctx.db.query("affiliateSessions")
       .withIndex("by_affiliate", q => q.eq("affiliateId", args.affiliateId)).collect();
@@ -292,7 +344,7 @@ export const suspendAffiliate = mutation({
 export const deleteAffiliate = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     // Alles löschen was zu diesem Partner gehört
     const [leads, contracts, commissions, payouts, sessions] = await Promise.all([
@@ -316,7 +368,7 @@ export const deleteAffiliate = mutation({
 export const getPendingLeads = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const leads = await ctx.db
       .query("shopLeads")
@@ -335,7 +387,7 @@ export const getPendingLeads = query({
 export const getAllLeads = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const leads = await ctx.db.query("shopLeads").order("desc").collect();
     // Admin-Direkt-Shops sind keine Partner-Leads → nicht im Partner-Bereich zeigen
     const partnerLeads = leads.filter(l => l.source !== "admin_direct");
@@ -359,7 +411,7 @@ export const approveLead = mutation({
     adminName:       v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const lead = await ctx.db.get(args.leadId);
     if (!lead) throw new ConvexError("Lead nicht gefunden");
@@ -403,7 +455,7 @@ export const rejectLead = mutation({
     reason:      v.string(),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     await ctx.db.patch(args.leadId, {
       status:          "rejected",
@@ -432,7 +484,7 @@ export const recordPayment = mutation({
     shopContractId: v.id("shopContracts"),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const result = await recordPaymentCore(ctx, {
       shopContractId: args.shopContractId,
@@ -454,7 +506,7 @@ export const recordPayment = mutation({
 export const confirmCommission = mutation({
   args: { adminSecret: v.string(), commissionId: v.id("commissions") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const c = await ctx.db.get(args.commissionId);
     if (!c) throw new ConvexError("Provision nicht gefunden");
     // 14 Tage Widerrufsfrist ab Zahlungsbestätigung (triggeredAt) einhalten.
@@ -476,7 +528,7 @@ export const confirmCommission = mutation({
 export const cancelContract = mutation({
   args: { adminSecret: v.string(), shopContractId: v.id("shopContracts"), note: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     await ctx.db.patch(args.shopContractId, {
       status:     "canceled",
       canceledAt: Date.now(),
@@ -502,7 +554,7 @@ export const createPayout = mutation({
     notes:         v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     let total = 0;
     for (const cId of args.commissionIds) {
@@ -542,7 +594,7 @@ export const createPayout = mutation({
 export const getEarningsSummary = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const [contracts, commissions] = await Promise.all([
       ctx.db.query("shopContracts").collect(),
@@ -619,7 +671,7 @@ export const getEarningsSummary = query({
 export const getEarningsDetail = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const commissions = await ctx.db.query("commissions").collect();
 
@@ -664,7 +716,7 @@ export const getEarningsDetail = query({
 export const deleteLeadForShop = mutation({
   args: { adminSecret: v.string(), loatycardShopId: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const lead = (await ctx.db.query("shopLeads").collect())
       .find(l => l.loatycardShopId === args.loatycardShopId);
@@ -702,7 +754,7 @@ export const deleteLeadForShop = mutation({
 export const getContractForLead = query({
   args: { adminSecret: v.string(), leadId: v.id("shopLeads") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     return ctx.db
       .query("shopContracts")
       .withIndex("by_shopLead", q => q.eq("shopLeadId", args.leadId))
@@ -715,7 +767,7 @@ export const getContractForLead = query({
 export const getContractForShop = query({
   args: { adminSecret: v.string(), loatycardShopId: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const lead = (await ctx.db.query("shopLeads").collect())
       .find(l => l.loatycardShopId === args.loatycardShopId);
@@ -794,7 +846,7 @@ export const updateContractRewardCount = mutation({
     rewardCount: v.number(),
   },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const contract = await ctx.db.get(args.contractId);
     if (!contract) throw new ConvexError("Vertrag nicht gefunden");
@@ -879,7 +931,7 @@ export const syncRewardCountForShop = internalMutation({
 export const getPayLaterList = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const contracts = (await ctx.db.query("shopContracts").collect())
       .filter(c => c.payLaterAt && c.paymentCount === 0 && c.status === "active");
@@ -916,7 +968,7 @@ export const getPayLaterList = query({
 export const getPayStatusForShops = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const leads = (await ctx.db.query("shopLeads").collect())
       .filter(l => l.loatycardShopId);
@@ -951,7 +1003,7 @@ export const getPayStatusForShops = query({
 export const clearPayLater = mutation({
   args: { adminSecret: v.string(), contractId: v.id("shopContracts") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const contract = await ctx.db.get(args.contractId);
     if (!contract) throw new ConvexError("Vertrag nicht gefunden");
     await ctx.db.patch(args.contractId, { payLaterAt: undefined });
@@ -969,7 +1021,7 @@ export const clearPayLater = mutation({
 export const getCommissionsForContract = query({
   args: { adminSecret: v.string(), contractId: v.id("shopContracts") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     return ctx.db
       .query("commissions")
       .withIndex("by_contract", q => q.eq("shopContractId", args.contractId))
@@ -983,7 +1035,7 @@ export const getCommissionsForContract = query({
 export const getAdminDashboard = query({
   args: { adminSecret: v.string() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
 
     const [allLeads, allAffiliates, commissions] = await Promise.all([
       ctx.db.query("shopLeads").collect(),
@@ -1021,7 +1073,7 @@ export const getAdminDashboard = query({
 export const approveProfileChange = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
     if (!a?.pendingProfile) throw new ConvexError("Keine ausstehende Änderung");
     const { submittedAt: _s, ...fields } = a.pendingProfile;
@@ -1039,7 +1091,7 @@ export const approveProfileChange = mutation({
 export const rejectProfileChange = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
     if (!a?.pendingProfile) throw new ConvexError("Keine ausstehende Änderung");
     await ctx.db.patch(args.affiliateId, { pendingProfile: undefined });
@@ -1057,7 +1109,7 @@ export const rejectProfileChange = mutation({
 export const setDiscountEligible = mutation({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates"), eligible: v.boolean() },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     await ctx.db.patch(args.affiliateId, { discountEligible: args.eligible });
     await ctx.db.insert("auditLog", {
       entityType: "affiliate",
@@ -1073,7 +1125,7 @@ export const setDiscountEligible = mutation({
 export const getAffiliateDetail = query({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
     if (!a) return null;
     const affiliate = sanitizeAffiliate(a);
@@ -1118,7 +1170,7 @@ export const getAffiliateDetail = query({
 export const getPartnerCommissionStatement = query({
   args: { adminSecret: v.string(), affiliateId: v.id("affiliates") },
   handler: async (ctx, args) => {
-    requireAdmin(args.adminSecret);
+    await requireAdmin(ctx, args.adminSecret);
     const a = await ctx.db.get(args.affiliateId);
     if (!a) return null;
 

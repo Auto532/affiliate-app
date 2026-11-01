@@ -241,7 +241,8 @@ export default defineSchema({
     createdAt:     v.number(),
     expiresAt:     v.number(),
   })
-    .index("by_token", ["token"]),
+    .index("by_token", ["token"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   // ── Affiliate-Sessions ──────────────────────────────────────────────────────
   affiliateSessions: defineTable({
