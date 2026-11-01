@@ -129,19 +129,10 @@ export default function PayPage() {
               <span className="text-[rgba(242,237,228,.7)]">€{info.rewardsPrice}</span>
             </div>
           )}
-          {info.setupFee > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-[rgba(242,237,228,.5)]">Einrichtung & individuelles Design (einmalig)</span>
-              {info.setupFee < (info.setupFeeNormal ?? info.setupFee) ? (
-                <span>
-                  <s className="text-[rgba(242,237,228,.35)]">€{info.setupFeeNormal}</s>{" "}
-                  <b className="text-[#e8c96a]">€{info.setupFee}</b>
-                </span>
-              ) : (
-                <span className="text-[rgba(242,237,228,.7)]">€{info.setupFee}</span>
-              )}
-            </div>
-          )}
+          <div className="flex justify-between text-xs">
+            <span className="text-[rgba(242,237,228,.5)]">Einrichtung & individuelles Design</span>
+            <span className="text-green-400">inklusive</span>
+          </div>
           {info.firstYearDiscount ? (
             <div className="flex justify-between text-xs">
               <span className="text-green-400">Rabatt {info.discountCode ?? ""} (−{Math.round(info.firstYearDiscount * 100)}%)</span>

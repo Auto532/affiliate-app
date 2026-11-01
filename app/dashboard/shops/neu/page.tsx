@@ -107,8 +107,7 @@ export default function NewShopPage() {
           style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)" }}>
           <p className="text-sm font-semibold text-[#f2ede4]">Einrichtung & individuelles Design</p>
           <p className="text-[11px] text-[rgba(242,237,228,.5)] mt-0.5">
-            Einmalig €99, bei jedem Shop automatisch dabei (eigenes Logo, eigene Farben).
-            Mit Rabattcode auf der Zahlungsseite nur €45.
+            Im Abo inklusive, keine Einrichtungsgebühr (eigenes Logo, eigene Farben).
           </p>
         </div>
 

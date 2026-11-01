@@ -87,7 +87,7 @@ export default defineSchema({
     inviteExpiresAt:   v.optional(v.number()),   // Unix timestamp
     inviteAcceptedAt:  v.optional(v.number()),
 
-    wantsDesign:       v.optional(v.boolean()),   // Legacy — Design ist jetzt immer inklusive (99 € Einrichtung)
+    wantsDesign:       v.optional(v.boolean()),   // Legacy — Design ist im Abo inklusive (keine Einrichtungsgebühr)
     wantsBonusStamps:  v.optional(v.boolean()),   // Legacy — abgelöst durch rewardCount
     // Anzahl Bonus-Belohnungen (5 €/Monat pro Belohnung), bei Vertragsanlage gewählt
     rewardCount:       v.optional(v.number()),

@@ -8,7 +8,7 @@ import { internal } from "./_generated/api";
 import { recordPaymentCore } from "./payments";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
-import { recurringPrice, rewardPrice, invoiceTotal, setupFee, discountedFirstInvoice, applyDiscount, SETUP_FEE, REWARD_PRICE_PER_MONTH } from "./pricing";
+import { recurringPrice, rewardPrice, discountedInvoice, REWARD_PRICE_PER_MONTH } from "./pricing";
 import { isCommissionPayable, commissionPayableAt } from "./commissionEngine";
 
 // ── Admin-Login (PIN → Sitzungs-Schlüssel) ──────────────────────────────────
@@ -605,17 +605,6 @@ export const getEarningsSummary = query({
     // genau eine Commission mit paidAmount; ältere ohne paidAmount → baseAmount (Listenpreis).
     const revenueTotal = commissions.reduce((s, c) => s + ((c as any).paidAmount ?? c.baseAmount), 0);
 
-    // Einrichtungsgebühren-Anteil: steckt in jeder ERSTEN Zahlung
-    // (99 € normal, 45 € Aktionspreis mit Rabattcode).
-    const contractById = new Map(contracts.map(c => [c._id, c]));
-    let setupFeesTotal = 0;
-    for (const c of commissions) {
-      if (c.paymentNumber !== 1) continue;
-      const contract = contractById.get(c.shopContractId);
-      if (!contract) continue;
-      setupFeesTotal += setupFee(!!contract.firstYearDiscount);
-    }
-
     // Provisionen nach Status
     const commPending   = commissions.filter(c => c.status === "pending")  .reduce((s, c) => s + c.amount, 0);
     const commConfirmed = commissions.filter(c => c.status === "confirmed").reduce((s, c) => s + c.amount, 0);
@@ -642,8 +631,6 @@ export const getEarningsSummary = query({
 
     return {
       revenueTotal:   Math.round(revenueTotal   * 100) / 100,
-      setupFeesTotal: Math.round(setupFeesTotal  * 100) / 100,
-      aboRevenue:     Math.round((revenueTotal - setupFeesTotal) * 100) / 100,
       commTotal:      Math.round(commTotal       * 100) / 100,
       commPending:    Math.round(commPending     * 100) / 100,
       commConfirmed:  Math.round(commConfirmed   * 100) / 100,
@@ -680,22 +667,12 @@ export const getEarningsDetail = query({
       const lead     = contract ? await ctx.db.get(contract.shopLeadId) : null;
       const paid     = (c as any).paidAmount ?? c.baseAmount;
 
-      // Einrichtungsanteil nur in Zahlung #1: 99 € normal, 45 € mit Rabattcode
-      let setupFeePaid = 0;
-      let setupFeeList = 0;
-      if (c.paymentNumber === 1 && contract) {
-        setupFeeList = SETUP_FEE;
-        setupFeePaid = setupFee(!!contract.firstYearDiscount);
-      }
-
       return {
         date:             c.triggeredAt,
         shopName:         lead?.shopName ?? "—",
         planType:         c.planType,
         paymentNumber:    c.paymentNumber,
         paidAmount:       Math.round(paid * 100) / 100,
-        setupFeePaid:     Math.round(setupFeePaid * 100) / 100,
-        setupFeeList,
         commission:       c.amount,
         commissionStatus: c.status,
         direct:           contract?.isDirect === true,
@@ -800,8 +777,8 @@ export const getContractForShop = query({
 
     const amountDue = contract.paymentCount === 0
       ? (contract.firstYearDiscount
-          ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
-          : invoiceTotal(contract.planType, rewardCount, true))
+          ? discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
+          : recurringPrice(contract.planType, rewardCount))
       : 0;
 
     return {
@@ -814,7 +791,6 @@ export const getContractForShop = query({
       recurringPrice:    recurringPrice(contract.planType, rewardCount),
       rewardUnitPrice:   rewardPrice(contract.planType),
       rewardPricePerMonth: REWARD_PRICE_PER_MONTH,
-      setupFee:          setupFee(!!contract.discountCode),
       discountCode:      contract.discountCode ?? null,
       firstYearDiscount: contract.firstYearDiscount ?? null,
       // Zahlungsstatus + Historie für die Vertragskarte
@@ -861,10 +837,10 @@ export const updateContractRewardCount = mutation({
     // Erste Zahlung noch offen + Rabatt hinterlegt → Erstrechnung neu berechnen,
     // damit Zahlungsseite und Stripe-Checkout den korrekten Betrag zeigen.
     if (contract.paymentCount === 0 && contract.firstYearDiscount) {
-      const normalPrice = invoiceTotal(contract.planType, rewardCount, true);
+      const normalPrice = recurringPrice(contract.planType, rewardCount);
       await ctx.db.patch(args.contractId, {
         normalPrice,
-        discountedPrice: discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
+        discountedPrice: discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
       });
     }
 
@@ -907,10 +883,10 @@ export const syncRewardCountForShop = internalMutation({
 
     // Erste Zahlung noch offen + Rabatt hinterlegt → Erstrechnung neu berechnen
     if (contract.paymentCount === 0 && contract.firstYearDiscount) {
-      const normalPrice = invoiceTotal(contract.planType, rewardCount, true);
+      const normalPrice = recurringPrice(contract.planType, rewardCount);
       await ctx.db.patch(contract._id, {
         normalPrice,
-        discountedPrice: discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
+        discountedPrice: discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
       });
     }
 
@@ -939,10 +915,9 @@ export const getPayLaterList = query({
     const rows = await Promise.all(contracts.map(async c => {
       const lead        = await ctx.db.get(c.shopLeadId);
       const rewardCount = c.rewardCount ?? 0;
-      const listTotal   = invoiceTotal(c.planType, rewardCount, true);
       const amount      = c.firstYearDiscount
-        ? (c.discountedPrice ?? applyDiscount(listTotal, c.firstYearDiscount))
-        : listTotal;
+        ? discountedInvoice(c.planType, rewardCount, c.firstYearDiscount)
+        : recurringPrice(c.planType, rewardCount);
       return {
         contractId:   c._id,
         shopName:     lead?.shopName ?? "—",
@@ -982,8 +957,8 @@ export const getPayStatusForShops = query({
 
       const rewardCount = contract.rewardCount ?? 0;
       const amountDue   = contract.firstYearDiscount
-        ? discountedFirstInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
-        : invoiceTotal(contract.planType, rewardCount, true);
+        ? discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
+        : recurringPrice(contract.planType, rewardCount);
 
       return {
         loatycardShopId: lead.loatycardShopId!,
@@ -1225,5 +1200,26 @@ export const getPartnerCommissionStatement = query({
         payableTotal: Math.round((pending + confirmed + paid) * 100) / 100,
       },
     };
+  },
+});
+
+// ── Einmalige Migration (2026-11-01): Einrichtungsgebühr abgeschafft ────────────
+// Offene Verträge (noch keine Zahlung) mit Rabattcode tragen gespeicherte
+// normalPrice/discountedPrice inkl. der alten Gebühr. Neu berechnen.
+export const recomputeOpenContractPrices = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const contracts = await ctx.db.query("shopContracts").collect();
+    let updated = 0;
+    for (const c of contracts) {
+      if (c.paymentCount !== 0 || !c.firstYearDiscount) continue;
+      const rewardCount = c.rewardCount ?? 0;
+      await ctx.db.patch(c._id, {
+        normalPrice:     recurringPrice(c.planType, rewardCount),
+        discountedPrice: discountedInvoice(c.planType, rewardCount, c.firstYearDiscount),
+      });
+      updated++;
+    }
+    return { updated };
   },
 });

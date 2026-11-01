@@ -10,8 +10,7 @@ const WHATSAPP_NR = process.env.SUPPORT_WHATSAPP ?? "+491634848207";
 // ── Zahlungsbestätigung ───────────────────────────────────────────────────────
 // Geht nach jedem Zahlungseingang raus (Stripe-Webhook / Test-Zahlung) und
 // zeigt die echte Abrechnung. Mit Rabattcode: Normalpreise durchgestrichen
-// (Einrichtung 99 € → 45 € Aktionspreis) + Hinweis, dass das Angebot nur für
-// die erste Rechnung gilt.
+// + Hinweis, dass das Angebot nur für die erste Rechnung gilt.
 // Bei Zahlung #1 ist das gleichzeitig die Willkommens-Mail (Begrüßung,
 // Design-Hinweis, rechtliche Unterlagen): Der Inhaber bekommt genau EINE Mail,
 // und zwar erst nach Zahlungsabschluss. Beim Anlegen (auch "Später zahlen")
@@ -29,8 +28,6 @@ export const sendPaymentConfirmationEmail = internalAction({
     aboPaid:           v.number(),
     rewardsList:       v.number(),
     rewardsPaid:       v.number(),
-    setupList:         v.number(),
-    setupPaid:         v.number(),
     totalPaid:         v.number(),
     discountCode:      v.optional(v.string()),
     firstYearDiscount: v.optional(v.number()),
@@ -61,9 +58,6 @@ export const sendPaymentConfirmationEmail = internalAction({
       ...(args.rewardCount > 0
         ? [row(`Bonusprogramm (${args.rewardCount} Belohnung${args.rewardCount === 1 ? "" : "en"})`, args.rewardsList, args.rewardsPaid)]
         : []),
-      ...(args.setupList > 0
-        ? [row("Einrichtung & individuelles Design (einmalig)", args.setupList, args.setupPaid)]
-        : []),
     ].join("");
 
     const discountBox = hasDiscount ? `
@@ -77,7 +71,6 @@ export const sendPaymentConfirmationEmail = internalAction({
               <p style="margin:0;color:#cfc9bd;font-size:13px;line-height:1.6;">
                 Der Aktionspreis gilt nur für deine erste Rechnung (dein erstes Jahr).
                 Danach läuft dein Abo zum Normalpreis von <strong style="color:#f2ede4;">${eur(renewal)} pro ${periodTxt}</strong> weiter.
-                Die Einrichtung fällt natürlich nur einmalig an.
               </p>
             </td></tr>
           </table>
@@ -270,7 +263,6 @@ export const sendPaymentConfirmationEmail = internalAction({
       ``,
       textLine(`LoyaltyCard ${planLabel}`, args.aboList, args.aboPaid),
       ...(args.rewardCount > 0 ? [textLine(`Bonusprogramm (${args.rewardCount})`, args.rewardsList, args.rewardsPaid)] : []),
-      ...(args.setupList > 0 ? [textLine("Einrichtung & individuelles Design (einmalig)", args.setupList, args.setupPaid)] : []),
       `Gezahlt: ${eur(args.totalPaid)}`,
       ``,
       ...(hasDiscount ? [
