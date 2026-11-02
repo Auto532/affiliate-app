@@ -5,24 +5,10 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { nextCommission } from "@/app/lib/nextCommission";
+import { tierInfo } from "@/convex/pricing";
 
 const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
-
-function nextCommission(planType: "annual" | "monthly", paymentCount: number, firstYearDiscount?: number | null) {
-  const next = paymentCount + 1;
-  const phase =
-    planType === "annual"
-      ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
-      : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
-  const rates: Record<string, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
-  // Provision nur auf den GEZAHLTEN Abo-Anteil: Rabattcodes gibt es nur für das
-  // Jahresabo und dort nur auf Zahlung #1
-  const inPromo = !!firstYearDiscount && planType === "annual" && next === 1;
-  const base = (planType === "annual" ? 240 : 20) * (inPromo ? 1 - firstYearDiscount! : 1);
-  const amount = Math.round(base * rates[phase] * 100) / 100;
-  const phaseLabelMap: Record<string, string> = { initial: "Jahr 1 (35%)", year2: "Ab Jahr 2 (15%)", year3: "Ab Jahr 2 (15%)", year4_plus: "Ab Jahr 2 (15%)" };
-  return { amount, phase: phaseLabelMap[phase] };
-}
 
 function DeleteButton({ token, leadId }: { token: string; leadId: string }) {
   const [confirm, setConfirm] = useState(false);
@@ -161,7 +147,7 @@ export default function ShopsPage() {
           <div className="space-y-3">
             {active.map((lead: any) => {
               const contract = lead.contract;
-              const next     = contract ? nextCommission(contract.planType, contract.paymentCount, contract.firstYearDiscount) : null;
+              const next     = contract ? nextCommission(contract.planType, contract.tier, contract.paymentCount) : null;
               return (
                 <div key={lead._id} className="rounded-2xl p-4 space-y-3"
                   style={{ background: "#17150f", border: "1px solid rgba(74,222,128,.15)" }}>
@@ -176,12 +162,12 @@ export default function ShopsPage() {
                     <div className="text-right flex-shrink-0">
                       <p className="text-xs font-semibold text-green-400">Aktiv</p>
                       <p className="text-[10px] text-[rgba(242,237,228,.3)]">
-                        {contract?.planType === "annual" ? "Jahresabo" : "Monatsabo"}
+                        {contract ? `${tierInfo(contract.tier).name} · ${contract.cardCount ?? 0} Kunden` : ""}
                       </p>
                     </div>
                   </div>
 
-                  {next && (
+                  {next && next.amount > 0 && (
                     <div className="rounded-lg px-3 py-2 flex items-center justify-between"
                       style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.12)" }}>
                       <p className="text-xs text-[rgba(242,237,228,.5)]">Nächste Provision · {next.phase}</p>

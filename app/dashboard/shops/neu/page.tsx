@@ -6,6 +6,7 @@ import { api } from "@/convex/_generated/api";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { errMsg } from "@/app/lib/errMsg";
+import TierTable from "@/app/lib/TierTable";
 
 export default function NewShopPage() {
   const router     = useRouter();
@@ -22,8 +23,6 @@ export default function NewShopPage() {
     shopName: "", ownerName: "", ownerEmail: "",
     ownerPhone: "", businessType: "", city: "",
   });
-  const [planType,    setPlanType]    = useState<"annual" | "monthly">("annual");
-  const [rewardCount, setRewardCount] = useState(0);
   const [error, setError]             = useState("");
   const [loading, setLoading]         = useState(false);
 
@@ -39,8 +38,7 @@ export default function NewShopPage() {
     setError(""); setLoading(true);
     try {
       const leadId = await submitLead({
-        token, planType,
-        rewardCount: rewardCount || undefined,
+        token,
         ...form,
         ownerPhone:   form.ownerPhone   || undefined,
         businessType: form.businessType || undefined,
@@ -76,65 +74,19 @@ export default function NewShopPage() {
       {/* Info-Banner */}
       <div className="rounded-xl px-4 py-3 text-sm text-[rgba(242,237,228,.6)]"
         style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)", borderLeft: "3px solid #c9a227" }}>
-        Der Shop wird sofort aktiv, deine Provision startet ab der ersten Zahlung.
+        Jeder Shop startet kostenlos (Free bis 25 Kunden). Wächst er, steigt er automatisch
+        in die nächste Stufe, und ab der ersten bezahlten Stufe bekommst du Provision.
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
 
-        {/* Plan-Auswahl */}
+        {/* Preisstufen (nach Anzahl Kunden mit Stempelkarte) */}
         <div>
-          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Vertragsmodell *</label>
-          <div className="grid grid-cols-2 gap-2">
-            {([
-              { id: "annual",  label: "Jahresabo",  price: "€240 / Jahr",  comm: "35% = €84" },
-              { id: "monthly", label: "Monatsabo",  price: "€20 / Monat",  comm: "35% = €7"  },
-            ] as const).map(p => (
-              <button key={p.id} type="button" onClick={() => setPlanType(p.id)}
-                className="rounded-xl p-3 text-left transition-colors"
-                style={planType === p.id
-                  ? { background: "rgba(201,162,39,.12)", border: "1px solid rgba(201,162,39,.4)" }
-                  : { background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
-                <p className="text-sm font-semibold text-[#f2ede4]">{p.label}</p>
-                <p className="text-xs text-[rgba(242,237,228,.4)] mt-0.5">{p.price}</p>
-                <p className="text-[10px] text-[#c9a227] mt-1">Provision: {p.comm}</p>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Immer inklusive: Einrichtung + Design */}
-        <div className="rounded-xl p-3"
-          style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.2)" }}>
-          <p className="text-sm font-semibold text-[#f2ede4]">Einrichtung & individuelles Design</p>
-          <p className="text-[11px] text-[rgba(242,237,228,.5)] mt-0.5">
-            Im Abo inklusive, keine Einrichtungsgebühr (eigenes Logo, eigene Farben).
+          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">Preis nach Kundenzahl (monatlich)</label>
+          <TierTable current="free" showCommission />
+          <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-1.5">
+            Provision im 1. Jahr 35 %, danach dauerhaft 15 %. Einrichtung, Design und Bonusprogramm sind immer inklusive.
           </p>
-        </div>
-
-        {/* Bonusprogramm */}
-        <div>
-          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-2">
-            Bonusprogramm: zusätzliche Belohnungsstufen (optional)
-          </label>
-          <div className="rounded-xl p-3 flex items-center justify-between"
-            style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
-            <div>
-              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Zusatz-Stufe{rewardCount === 1 ? "" : "n"}</p>
-              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">
-                Die erste Belohnung (z.B. 10 Stempel) ist immer inklusive.
-                {" "}€5 / Monat pro Zusatz-Stufe{planType === "annual" ? " (€60 / Jahr)" : ""}
-                {rewardCount > 0 && ` · gesamt ${planType === "annual" ? `€${rewardCount * 60} / Jahr` : `€${rewardCount * 5} / Monat`}`}
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}
-                className="w-9 h-9 rounded-lg text-lg font-bold text-[#f2ede4]"
-                style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)" }}>−</button>
-              <button type="button" onClick={() => setRewardCount(c => Math.min(20, c + 1))}
-                className="w-9 h-9 rounded-lg text-lg font-bold text-[#0d0c0a]"
-                style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>+</button>
-            </div>
-          </div>
         </div>
 
         {/* Shop-Felder */}

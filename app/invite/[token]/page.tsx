@@ -5,6 +5,7 @@ import { useMutation } from "convex/react";
 import { api } from "@/convex/_generated/api";
 import { useParams, useRouter } from "next/navigation";
 import { errMsg } from "@/app/lib/errMsg";
+import TierTable from "@/app/lib/TierTable";
 
 export default function InvitePage() {
   const params    = useParams();
@@ -16,7 +17,6 @@ export default function InvitePage() {
     shopName: "", ownerName: "", ownerEmail: "",
     ownerPhone: "", businessType: "", city: "",
   });
-  const [rewardCount, setRewardCount] = useState(0);
   const [done, setDone]       = useState(false);
   const [error, setError]     = useState("");
   const [loading, setLoading] = useState(false);
@@ -39,7 +39,6 @@ export default function InvitePage() {
         ownerPhone:   form.ownerPhone   || undefined,
         businessType: form.businessType || undefined,
         city:         form.city         || undefined,
-        rewardCount:  rewardCount || undefined,
       });
       setDone(true);
     } catch (err: any) {
@@ -117,26 +116,13 @@ export default function InvitePage() {
           </div>
         ))}
 
-        {/* Bonusprogramm (optional) */}
+        {/* Preisstufen */}
         <div>
-          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-1.5">
-            Bonusprogramm: zusätzliche Belohnungsstufen (optional)
-          </label>
-          <div className="rounded-xl p-3 flex items-center justify-between"
-            style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)" }}>
-            <div>
-              <p className="text-sm font-semibold text-[#f2ede4]">{rewardCount} Zusatz-Stufe{rewardCount === 1 ? "" : "n"}</p>
-              <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-0.5">Die erste Belohnung ist immer inklusive. 5 € / Monat pro Zusatz-Stufe</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setRewardCount(c => Math.max(0, c - 1))}
-                className="w-9 h-9 rounded-lg text-lg font-bold text-[#f2ede4]"
-                style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.12)" }}>−</button>
-              <button type="button" onClick={() => setRewardCount(c => Math.min(20, c + 1))}
-                className="w-9 h-9 rounded-lg text-lg font-bold text-[#0d0c0a]"
-                style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>+</button>
-            </div>
-          </div>
+          <label className="block text-xs text-[rgba(242,237,228,.5)] mb-1.5">Dein Preis richtet sich nach deiner Kundenzahl</label>
+          <TierTable current="free" />
+          <p className="text-[10px] text-[rgba(242,237,228,.4)] mt-1.5">
+            Du startest kostenlos. Einrichtung, individuelles Design und Bonusprogramm sind immer inklusive.
+          </p>
         </div>
 
         {error && (

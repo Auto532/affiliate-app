@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import QRCode from "react-qr-code";
+import { TIERS, tierRangeLabel } from "@/convex/pricing";
 
 const GOLD = "#c9a227";
 const CARD: React.CSSProperties = { background: "#17150f", border: "1px solid rgba(255,255,255,.06)" };
@@ -53,7 +54,7 @@ const SECTIONS: Section[] = [
             „LoyaltyCard ersetzt die Papier-Stempelkarte durch eine digitale Karte auf dem Handy,
             <b> ohne App-Download</b>, für niemanden. Der Kunde scannt einmal einen QR-Code, hat seine
             Karte immer dabei und kommt öfter wieder. Und Sie sehen zum ersten Mal, wer Ihre
-            Stammkunden wirklich sind."
+            Stammkunden wirklich sind. Starten können Sie kostenlos: bis 25 Kunden zahlen Sie nichts."
           </P>
         </div>
         <P>Das ist dein Elevator Pitch. Auswendig können, natürlich sagen. Danach sofort die Demo: eigenen QR-Code am Handy zeigen und einen Stempel geben lassen. Das Produkt verkauft sich visuell.</P>
@@ -132,7 +133,7 @@ const SECTIONS: Section[] = [
         <H>3. Demo</H>
         <P>Dein Handy raus, Karte zeigen, Stempel-Animation zeigen. Dann: „So sieht das mit Ihrem Logo und Ihren Farben aus", dazu in der Live-Demo die Designs durchschalten.</P>
         <H>4. Abschluss</H>
-        <P>„Die Einrichtung übernehmen komplett wir. Sie bekommen den fertigen QR-Aufsteller-Code und Ihren Zugang. Sollen wir das direkt anlegen? Formular gemeinsam ausfüllen oder Einladungslink dalassen.</P>
+        <P>„Die Einrichtung übernehmen komplett wir, und bis 25 Kunden kostet es Sie gar nichts. Sie bekommen den fertigen QR-Aufsteller-Code und Ihren Zugang. Sollen wir das direkt anlegen?" Formular gemeinsam ausfüllen oder Einladungslink dalassen.</P>
       </div>
     ),
   },
@@ -140,23 +141,43 @@ const SECTIONS: Section[] = [
     id: "preise", title: "Preise & Produkte", icon: "💶",
     body: (
       <div className="space-y-3">
+        <P>
+          Der Preis richtet sich nach der <b>Anzahl der Kunden mit Stempelkarte</b>. Gezählt wird jede
+          E-Mail-Adresse einmal, auch wenn jemand mehrere Karten hat (z. B. nach einem Handywechsel). Abgerechnet wird monatlich per SEPA-Lastschrift oder Karte, jederzeit kündbar.
+        </P>
         <div className="grid grid-cols-1 gap-2">
-          {[
-            { name: "Jahresabo",               preis: "240 € / Jahr",   detail: "Rund 66 Cent pro Tag. Das Hauptprodukt: digitale Stempelkarte, QR-Scanner, Kunden-Statistiken." },
-            { name: "Monatsabo",               preis: "20 € / Monat",   detail: "Der flexible Einstieg für Zögerer. Gleicher Funktionsumfang." },
-            { name: "Einrichtung & Design",    preis: "inklusive, keine Einrichtungsgebühr",  detail: "Bei jedem Shop dabei, ohne Aufpreis: komplette Einrichtung plus individuelles Design: eigenes Logo, eigene Farben, eigener Look. Starkes Argument gegenüber Anbietern mit Einrichtungsgebühr. ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'" },
-            { name: "Bonusprogramm",           preis: "5 € / Monat pro Belohnung", detail: "Mehrstufige Belohnungen (z.B. Stufe 1 nach 5 Stempeln, Stufe 2 nach 10). Pro eingerichteter Belohnung 5 € im Monat, beim Jahresabo 60 € im Jahr. Anzahl wird beim Anlegen des Shops festgelegt." },
-          ].map(p => (
-            <div key={p.name} className="rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
+          {TIERS.map(t => (
+            <div key={t.id} className="rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
               <div className="flex items-baseline justify-between gap-2">
-                <p className="text-sm font-bold text-[#f2ede4]">{p.name}</p>
-                <p className="text-sm font-bold" style={{ color: GOLD }}>{p.preis}</p>
+                <p className="text-sm font-bold text-[#f2ede4]">{t.name} <span className="font-normal text-[rgba(242,237,228,.5)]">· {tierRangeLabel(t.id)}</span></p>
+                <p className="text-sm font-bold" style={{ color: GOLD }}>{t.monthly === 0 ? "kostenlos" : `${t.monthly} € / Monat`}</p>
               </div>
-              <p className="text-xs leading-relaxed text-[rgba(242,237,228,.55)] mt-1">{p.detail}</p>
+              <p className="text-xs leading-relaxed text-[rgba(242,237,228,.55)] mt-1">
+                {t.monthly === 0
+                  ? "Der Einstieg ohne Risiko. Gleicher Funktionsumfang wie alle Stufen. Keine Provision, bis der Shop wächst."
+                  : `Deine Provision: ${(t.monthly * 0.35).toLocaleString("de-DE")} € pro Monat im 1. Jahr, danach ${(t.monthly * 0.15).toLocaleString("de-DE")} € pro Monat.`}
+              </p>
             </div>
           ))}
+          <div className="rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-bold text-[#f2ede4]">Einrichtung, Design & Bonusprogramm</p>
+              <p className="text-sm font-bold" style={{ color: GOLD }}>inklusive</p>
+            </div>
+            <p className="text-xs leading-relaxed text-[rgba(242,237,228,.55)] mt-1">
+              In jeder Stufe ohne Aufpreis: komplette Einrichtung, individuelles Design (eigenes Logo, eigene Farben)
+              und mehrstufige Belohnungen. Starkes Argument gegenüber Anbietern mit Einrichtungsgebühr.
+              ‚Mit Ihrem Logo wirkt das wie Ihre eigene App.'
+            </p>
+          </div>
         </div>
-        <P><b>Rabattcodes:</b> Nur einsetzen, wenn du dafür freigeschaltet bist (steht in deinem Profil bzw. sag uns Bescheid). Niemals eigenmächtig Rabatte versprechen.</P>
+        <P>
+          <b>So kommt deine Provision:</b> Jeder Shop startet in Free. Sobald er mehr als 25 Kunden hat,
+          rutscht er automatisch in Starter und zahlt. Ab dann bekommst du 35 % in den ersten 12 bezahlten
+          Monaten, danach dauerhaft 15 %. Je mehr Kunden der Shop gewinnt, desto höher die Stufe und deine Provision.
+          Hilf dem Inhaber also beim Start (QR-Aufsteller sichtbar platzieren, Personal einweisen), das zahlt sich für dich aus.
+        </P>
+        <P><b>Keine Rabatte:</b> Es gibt aktuell keine Rabattcodes. Niemals eigenmächtig Rabatte oder Sonderpreise versprechen.</P>
       </div>
     ),
   },
@@ -189,7 +210,7 @@ const SECTIONS: Section[] = [
     body: (
       <div className="space-y-2">
         <Einwand e="Das ist mir zu teuer."
-          a="Das Jahresabo kostet keine 70 Cent pro Tag. Wenn dadurch nur ein einziger Kunde pro Woche einmal öfter kommt, hat es sich mehrfach bezahlt. Rechnen Sie es an Ihrem Durchschnittsbon durch." />
+          a="Bis 25 Kunden kostet es Sie gar nichts. Sie zahlen erst, wenn es funktioniert und mehr Kunden mitmachen, und dann ab 10 € im Monat. Wenn dadurch nur ein einziger Kunde pro Woche einmal öfter kommt, hat es sich mehrfach bezahlt." />
         <Einwand e="Meine Papierkarten funktionieren doch."
           a="Wie viele kommen tatsächlich voll zurück? Die meisten landen in der Waschmaschine oder im Müll. Und: Papier sagt Ihnen nicht, wer Ihre Stammkunden sind. Die digitale Karte schon." />
         <Einwand e="Bringt mir das überhaupt was?"
@@ -201,7 +222,7 @@ const SECTIONS: Section[] = [
         <Einwand e="Was ist mit Datenschutz?"
           a="Es werden nur Name und Telefonnummer der Kunden gespeichert, mit Einwilligung, DSGVO-konform, Daten liegen auf Servern in der EU." />
         <Einwand e="Ich überlege es mir."
-          a="Klar. Zwei Angebote: das Monatsabo für 20 € als unverbindlicher Einstieg, oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
+          a="Klar. Aber Sie gehen kein Risiko ein: Sie starten kostenlos, bis 25 Kunden zahlen Sie nichts, und kündbar ist es jederzeit. Oder ich lasse Ihnen den Einladungslink da und Sie schauen es sich in Ruhe an. Wann darf ich nochmal vorbeikommen?" />
       </div>
     ),
   },
@@ -220,7 +241,7 @@ const SECTIONS: Section[] = [
         <H>Don't</H>
         <Li color="#f87171" items={[
           <>Nichts versprechen, was das Produkt nicht kann (keine „Umsatzgarantien").</>,
-          <>Keine Rabatte oder Gratis-Monate zusagen, für die du nicht freigeschaltet bist.</>,
+          <>Keine Rabatte, Gratis-Monate oder Sonderpreise zusagen.</>,
           <>Nicht drängen. Ein „Nein, danke" akzeptieren und die Tür für später offen lassen.</>,
           <>Keine Design-Zusagen im Detail („das Logo blinkt dann…"). Design-Wünsche nehmen wir auf und setzen um, was gut aussieht.</>,
           <>Niemals schlecht über andere Anbieter oder den Laden reden.</>,
@@ -236,7 +257,7 @@ const SECTIONS: Section[] = [
           Jede Stempelkarte bekommt ein eigenes Impressum und eigene Rechtstexte, damit der
           Shop rechtlich sauber online geht. Sag dem Inhaber am besten <b>schon im Gespräch</b>,
           welche Angaben wir dafür brauchen. Dann liegt alles bereit, wenn wir uns nach der
-          Zahlung für die Einrichtung melden.
+          Freischaltung für die Einrichtung melden.
         </P>
         <H>Das muss der Inhaber bereithalten</H>
         <Li items={[
@@ -248,8 +269,8 @@ const SECTIONS: Section[] = [
         ]} />
         <H>Worauf du achten musst</H>
         <Li items={[
-          <>Nur ankündigen, was gebraucht wird. <b>Keine Rechtsberatung geben</b>, auch nicht zu AGB oder Datenschutz. Alle Detailfragen klären wir nach der Zahlung direkt mit dem Inhaber.</>,
-          <>Die komplette Liste steht auch nochmal in der Willkommens-Mail, die der Inhaber nach der Zahlung bekommt. Er muss sich also nichts merken.</>,
+          <>Nur ankündigen, was gebraucht wird. <b>Keine Rechtsberatung geben</b>, auch nicht zu AGB oder Datenschutz. Alle Detailfragen klären wir nach der Freischaltung direkt mit dem Inhaber.</>,
+          <>Die komplette Liste steht auch nochmal in der Willkommens-Mail, die der Inhaber nach der Freischaltung bekommt. Merken muss sich also niemand etwas.</>,
           <>Hat der Shop keine eigenen AGB oder Datenschutzerklärung, ist das kein Problem und kein Abschluss-Hindernis, das klären wir bei der Einrichtung.</>,
         ]} />
       </div>
@@ -261,10 +282,11 @@ const SECTIONS: Section[] = [
       <div className="space-y-2">
         {[
           { n: 1, t: "Shop einreichen", d: "Über ‚Neuen Shop einreichen' das Formular ausfüllen, oder dem Inhaber deinen Einladungslink geben, dann füllt er es selbst aus." },
-          { n: 2, t: "Zahlung", d: "Der Inhaber zahlt über den Zahlungslink (Karte oder SEPA). Den Link findest du beim Shop unter ‚Meine Shops'. Vor der Zahlung bekommt er bewusst noch keine E-Mail." },
-          { n: 3, t: "Willkommens-Mail", d: "Direkt nach der Zahlung bekommt der Inhaber automatisch EINE Mail: Willkommen, Zahlungsübersicht und die Liste der Unterlagen (Impressum und Co.)." },
-          { n: 4, t: "Automatische Einrichtung", d: "Mit der Zahlung wird die Stempelkarte automatisch angelegt. Wir melden uns innerhalb von 24 Stunden für Design und Einrichtung." },
-          { n: 5, t: "Deine Provision", d: "Erscheint sofort unter ‚Provisionen'. Ausgezahlt wird sie per SEPA nach der 14-tägigen Widerrufsfrist ab Zahlungsbestätigung des Shops." },
+          { n: 2, t: "Freischalten", d: "Der Inhaber öffnet den Freischalt-Link und hinterlegt einmal seine Zahlungsdaten (SEPA-Lastschrift oder Karte). Bis 25 Kunden wird nichts abgebucht. Den Link findest du beim Shop unter ‚Meine Shops'. Vorher bekommt der Inhaber bewusst noch keine E-Mail." },
+          { n: 3, t: "Willkommens-Mail", d: "Direkt nach der Freischaltung bekommt der Inhaber automatisch eine Mail: Willkommen, sein Tarif und die Liste der Unterlagen (Impressum und Co.)." },
+          { n: 4, t: "Automatische Einrichtung", d: "Mit der Freischaltung wird die Stempelkarte automatisch angelegt. Wir melden uns innerhalb von 24 Stunden für Design und Einrichtung." },
+          { n: 5, t: "Wachstum & Stufenwechsel", d: "Wächst der Shop über eine Grenze (25, 75, 200 Kunden), bekommt der Inhaber eine Mail und ab der nächsten Abrechnung gilt automatisch die höhere Stufe." },
+          { n: 6, t: "Deine Provision", d: "Für jede bezahlte Monatsrechnung erscheint sie unter ‚Provisionen'. Ausgezahlt wird sie per SEPA nach der 14-tägigen Widerrufsfrist ab Zahlungseingang." },
         ].map(s => (
           <div key={s.n} className="flex gap-3 rounded-xl p-3" style={{ background: "#1c1a13", border: "1px solid rgba(255,255,255,.05)" }}>
             <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 text-[11px] font-bold"

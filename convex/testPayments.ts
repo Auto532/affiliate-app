@@ -1,6 +1,6 @@
 // ⚠️ TEST-ONLY ────────────────────────────────────────────────────────────────
-// Simuliert eine erfolgreiche Zahlung, um den Provisions-/Provisioning-Flow ohne
-// echtes Geld zu testen.
+// Simuliert Freischaltung bzw. Zahlung, um den Provisions-/Provisioning-Flow
+// ohne echtes Geld zu testen.
 //
 // VOR LIVE-SCHALTUNG RESTLOS ENTFERNEN:
 //   1. diese Datei löschen
@@ -33,13 +33,20 @@ export const simulateTestPayment = action({
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new ConvexError("Ungültiger Zahlungslink");
 
-    const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
+    // Noch nicht freigeschaltet → Freischaltung simulieren (wie abgeschlossener
+    // Stripe-Checkout). Schon live → eine Monatszahlung zum Stufenpreis buchen
+    // (bei Free passiert nichts, weil 0 € keine Zahlung ist).
+    if (!info.activated) {
+      await ctx.runMutation(internal.payments.activateContract, {
+        shopContractId: info.contractId,
+        method:         "test",
+      });
+      return;
+    }
+    await ctx.runMutation(internal.payments.autoRecordPayment, {
       shopContractId: info.contractId,
       paymentRef:     `test-${Date.now()}`,
       method:         "test",
     });
-    if (result?.paymentNumber === 1) {
-      await ctx.runAction(internal.payments.provisionShop, { shopContractId: info.contractId });
-    }
   },
 });

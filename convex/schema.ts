@@ -33,8 +33,7 @@ export default defineSchema({
     bankBic:       v.optional(v.string()),
     bankName:      v.optional(v.string()),
     notes:         v.optional(v.string()),
-    // Rabatt: nur wenn der Admin diesen Partner freigeschaltet hat, greifen Rabattcodes
-    // für seine Shops (bewusst NICHT automatisch — siehe convex/discounts.ts).
+    // Legacy — Rabattcodes seit 2026-11-02 entfernt (Migration leert das Feld)
     discountEligible: v.optional(v.boolean()),
     // Freigabepflichtige Profiländerung (sensible Felder), wartet auf Admin-Freigabe.
     pendingProfile: v.optional(v.object({
@@ -89,7 +88,7 @@ export default defineSchema({
 
     wantsDesign:       v.optional(v.boolean()),   // Legacy — Design ist im Abo inklusive (keine Einrichtungsgebühr)
     wantsBonusStamps:  v.optional(v.boolean()),   // Legacy — abgelöst durch rewardCount
-    // Anzahl Bonus-Belohnungen (5 €/Monat pro Belohnung), bei Vertragsanlage gewählt
+    // Legacy — Bonus-Aufpreis seit 2026-11-02 abgeschafft
     rewardCount:       v.optional(v.number()),
 
     rejectionReason:   v.optional(v.string()),
@@ -124,18 +123,28 @@ export default defineSchema({
     canceledAt:    v.optional(v.number()),
     paymentToken:  v.optional(v.string()),
 
-    // Anzahl Bonus-Belohnungen: 5 €/Monat pro Belohnung auf jeder Rechnung
-    // (Jahresabo: 60 €/Jahr pro Belohnung). Fehlt = 0.
+    // Legacy — Bonus-Aufpreis (5 €/Belohnung) seit 2026-11-02 abgeschafft.
     rewardCount:   v.optional(v.number()),
+
+    // Preisstufe nach Anzahl Kunden (siehe pricing.ts). cardCount = Kundenzahl. Wird von der
+    // Stempelkarten-App über die Brücke /sync-card-count aktuell gehalten.
+    // Fehlt = Free.
+    tier:          v.optional(v.union(
+      v.literal("free"), v.literal("starter"), v.literal("business"), v.literal("premium"),
+    )),
+    cardCount:     v.optional(v.number()),
+    tierChangedAt: v.optional(v.number()),
+
+    // Freigeschaltet (Bezahldaten hinterlegt bzw. vom Admin aktiviert). Ab dann
+    // ist der Shop live; Zahlungen kommen danach monatlich über Stripe.
+    activatedAt:   v.optional(v.number()),
 
     // Direktvertrieb: Vertrag wurde vom Admin ohne Partner angelegt.
     // Zahlungen erzeugen weiterhin Commission-Rows (für den Umsatz in den
     // Finanzen), aber mit Rate 0 — es gibt keinen Partner, der Provision bekommt.
     isDirect:      v.optional(v.boolean()),
 
-    // Rabatt auf das erste Jahr (Testmodus). An die ERSTE Abrechnungsperiode
-    // gekoppelt (paymentNumber === 1) → bildet später Stripe coupon duration:"once" ab.
-    // Ab Zahlung 2 (Verlängerung) gilt automatisch normalPrice.
+    // Legacy — Rabattcodes seit 2026-11-02 entfernt (Migration leert die Felder)
     discountCode:      v.optional(v.string()),
     firstYearDiscount: v.optional(v.number()),  // z.B. 0.5
     normalPrice:       v.optional(v.number()),  // Listenpreis
@@ -146,7 +155,11 @@ export default defineSchema({
     // Admin-Liste), kann vom Admin auch manuell gelöscht werden.
     payLaterAt:    v.optional(v.number()),
 
-    // Stripe Subscription (wird gesetzt sobald STRIPE_SUBSCRIPTION_MODE aktiv)
+    // Zuletzt erstellte Checkout-Sitzung: wird wiederverwendet, solange sie
+    // offen ist, damit nicht mehrere Abos für denselben Vertrag entstehen.
+    stripeCheckoutSessionId: v.optional(v.string()),
+
+    // Stripe-Abo (gesetzt nach abgeschlossenem Checkout)
     stripeSubscriptionId: v.optional(v.string()),
     stripeCustomerId:     v.optional(v.string()),
   })

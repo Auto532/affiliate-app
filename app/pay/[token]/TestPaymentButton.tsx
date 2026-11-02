@@ -42,7 +42,7 @@ export default function TestPaymentButton({ token }: { token: string }) {
       <button onClick={run} disabled={loading || !pin}
         className="w-full py-3 rounded-2xl font-semibold text-sm disabled:opacity-40 transition-opacity"
         style={{ background: "rgba(255,255,255,.05)", border: "1px dashed rgba(255,255,255,.15)", color: "rgba(242,237,228,.4)" }}>
-        {loading ? "Simuliere..." : "🧪 Test-Zahlung simulieren"}
+        {loading ? "Simuliere..." : "🧪 Test: freischalten bzw. Monatszahlung simulieren"}
       </button>
       {error && <p className="text-center text-red-400 text-xs">{error}</p>}
     </div>

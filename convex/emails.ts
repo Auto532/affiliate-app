@@ -1,137 +1,24 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
-import { recurringPrice } from "./pricing";
+import { TIERS, tierInfo, tierRangeLabel, type Tier } from "./pricing";
 import { escapeHtml } from "./htmlEscape";
 
 const RESEND_KEY  = process.env.RESEND_API_KEY ?? "";
 const FROM_EMAIL  = process.env.RESEND_FROM_EMAIL ?? "LoyaltyCard <onboarding@resend.dev>";
 const WHATSAPP_NR = process.env.SUPPORT_WHATSAPP ?? "+491634848207";
 
-// ── Zahlungsbestätigung ───────────────────────────────────────────────────────
-// Geht nach jedem Zahlungseingang raus (Stripe-Webhook / Test-Zahlung) und
-// zeigt die echte Abrechnung. Mit Rabattcode: Normalpreise durchgestrichen
-// + Hinweis, dass das Angebot nur für die erste Rechnung gilt.
-// Bei Zahlung #1 ist das gleichzeitig die Willkommens-Mail (Begrüßung,
-// Design-Hinweis, rechtliche Unterlagen): Der Inhaber bekommt genau EINE Mail,
-// und zwar erst nach Zahlungsabschluss. Beim Anlegen (auch "Später zahlen")
-// geht bewusst nichts raus.
+const vTier = v.union(v.literal("free"), v.literal("starter"), v.literal("business"), v.literal("premium"));
 
-export const sendPaymentConfirmationEmail = internalAction({
-  args: {
-    ownerEmail:        v.string(),
-    ownerName:         v.string(),
-    shopName:          v.string(),
-    planType:          v.union(v.literal("annual"), v.literal("monthly")),
-    rewardCount:       v.number(),
-    paymentNumber:     v.number(),
-    aboList:           v.number(),
-    aboPaid:           v.number(),
-    rewardsList:       v.number(),
-    rewardsPaid:       v.number(),
-    totalPaid:         v.number(),
-    discountCode:      v.optional(v.string()),
-    firstYearDiscount: v.optional(v.number()),
-  },
-  handler: async (_ctx, args) => {
-    if (!RESEND_KEY) return;
+const eur = (n: number) => `€${n.toLocaleString("de-DE", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
-    const eur = (n: number) => `€${n.toLocaleString("de-DE", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
-    const periodTxt   = args.planType === "annual" ? "Jahr" : "Monat";
-    const planLabel   = args.planType === "annual" ? "Jahresabo" : "Monatsabo";
-    const hasDiscount = !!args.discountCode;
-    const renewal     = recurringPrice(args.planType, args.rewardCount);
-    const isFirst     = args.paymentNumber === 1;
+// ── Inhaber-Mails ─────────────────────────────────────────────────────────────
+// (1) Willkommen: bei der Freischaltung (Bezahldaten hinterlegt bzw. vom Admin
+//     aktiviert). Beim bloßen Anlegen (auch "Später zahlen") geht nichts raus.
+// (2) Zahlungsbestätigung: nach jeder echten Zahlung > 0 € (Stripe-Rechnung).
+// (3) Stufenwechsel: wenn der Shop eine Kartengrenze überschreitet.
 
-    // Eine Rechnungszeile: bei Rabatt Normalpreis durchgestrichen + Aktionspreis in Gold.
-    // Wichtig für Handy-Clients: Betrags-Zelle komplett ohne umbrechbare Leerzeichen,
-    // sonst bricht der Betrag bei schmalen Displays mitten auseinander.
-    const row = (label: string, list: number, paid: number) => `
-              <tr>
-                <td style="padding:7px 12px 7px 0;color:#cfc9bd;font-size:14px;">${label}</td>
-                <td style="padding:7px 0;text-align:right;white-space:nowrap;">${hasDiscount && paid < list
-                    ? `<span style="color:#6b6558;text-decoration:line-through;font-size:13px;">${eur(list)}</span>&nbsp;<span style="color:#e8c96a;font-weight:700;font-size:14px;">${eur(paid)}</span>`
-                    : `<span style="color:#f2ede4;font-weight:600;font-size:14px;">${eur(paid)}</span>`}</td>
-              </tr>`;
-
-    const rows = [
-      row(`LoyaltyCard ${planLabel}`, args.aboList, args.aboPaid),
-      ...(args.rewardCount > 0
-        ? [row(`Bonusprogramm (${args.rewardCount} Belohnung${args.rewardCount === 1 ? "" : "en"})`, args.rewardsList, args.rewardsPaid)]
-        : []),
-    ].join("");
-
-    const discountBox = hasDiscount ? `
-        <tr><td style="padding:0 32px 24px 32px;">
-          <table width="100%" cellpadding="0" cellspacing="0"
-            style="background:#201a0d;border-radius:10px;border-left:4px solid #c9a227;">
-            <tr><td style="padding:14px 18px;">
-              <p style="margin:0 0 6px 0;font-size:13px;font-weight:700;color:#e8c96a;">
-                Dein Angebot: ${escapeHtml(args.discountCode ?? "")}
-              </p>
-              <p style="margin:0;color:#cfc9bd;font-size:13px;line-height:1.6;">
-                Der Aktionspreis gilt nur für deine erste Rechnung (dein erstes Jahr).
-                Danach läuft dein Abo zum Normalpreis von <strong style="color:#f2ede4;">${eur(renewal)} pro ${periodTxt}</strong> weiter.
-              </p>
-            </td></tr>
-          </table>
-        </td></tr>` : "";
-
-    const included = [
-      "Digitale Stempelkarte für deine Kunden, ohne App-Download",
-      "Individuelles Design: dein Logo, deine Farben, dein Look",
-      "QR-Code-Vorlagen für Theke und Aushang",
-      "Betriebs-Dashboard mit Scanner und Kunden-Statistiken",
-      ...(args.rewardCount > 0 ? [`Bonusprogramm mit ${args.rewardCount} Belohnungsstufe${args.rewardCount === 1 ? "" : "n"}`] : []),
-      "Persönlicher Support per WhatsApp und Telefon",
-      "Alle Updates und neuen Funktionen inklusive",
-    ];
-
-    // Willkommens-Teile: nur bei der ersten Zahlung (kombinierte Mail)
-    const designSection = isFirst ? `
-    <tr>
-      <td style="padding:0 32px 24px 32px;">
-        <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.7;">
-          Zu deinem Paket gehört ein <strong>individuelles Design</strong> deiner
-          Stempelkarte. Wir melden uns <strong>innerhalb der nächsten 24 Stunden</strong>
-          persönlich bei dir, damit deine Karte genauso aussieht, wie du es dir vorstellst.
-        </p>
-      </td>
-    </tr>` : "";
-
-    const legalSection = isFirst ? `
-    <tr>
-      <td style="padding:0 32px 24px 32px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
-          <tr><td style="padding:16px 20px;">
-            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#f2ede4;text-transform:uppercase;letter-spacing:1px;">
-              Bitte halte diese Angaben bereit
-            </p>
-            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Impressum (Firmenname, Inhaber, Anschrift, Kontakt)
-            </p>
-            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Umsatzsteuer-ID bzw. Steuernummer
-            </p>
-            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Handelsregisternummer &amp; Registergericht (falls eingetragen)
-            </p>
-            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; AGB deines Shops (falls vorhanden)
-            </p>
-            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; Datenschutzerkl&auml;rung bzw. Datenschutz-Kontakt
-            </p>
-            <p style="margin:12px 0 0 0;color:#8a8577;font-size:13px;line-height:1.6;">
-              Diese Angaben brauchen wir für das Impressum, damit deine Stempelkarte
-              rechtlich sauber online gehen kann. Kein Stress, wir gehen alles
-              gemeinsam mit dir durch.
-            </p>
-          </td></tr>
-        </table>
-      </td>
-    </tr>` : "";
-
-    const html = `
+function ownerMailShell(subtitle: string, inner: string): string {
+  return `
 <!DOCTYPE html>
 <html lang="de">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -140,73 +27,13 @@ export const sendPaymentConfirmationEmail = internalAction({
   <tr><td align="center">
   <table width="540" cellpadding="0" cellspacing="0"
     style="background:#17150f;border-radius:20px;overflow:hidden;max-width:540px;width:100%;">
-
-    <!-- Header -->
     <tr>
       <td style="background:#0d0c0a;padding:28px 32px;text-align:center;">
         <p style="margin:0;color:#c9a227;font-size:24px;font-weight:900;letter-spacing:6px;">LOYALTYCARD</p>
-        <p style="margin:6px 0 0 0;color:rgba(242,237,228,0.45);font-size:12px;letter-spacing:2px;">${isFirst ? "WILLKOMMEN &amp; ZAHLUNGSBEST&Auml;TIGUNG" : "ZAHLUNGSBEST&Auml;TIGUNG"}</p>
+        <p style="margin:6px 0 0 0;color:rgba(242,237,228,0.45);font-size:12px;letter-spacing:2px;">${subtitle}</p>
       </td>
     </tr>
-
-    <!-- Greeting -->
-    <tr>
-      <td style="padding:36px 32px 20px 32px;">
-        <h1 style="margin:0 0 16px 0;font-size:22px;color:#f2ede4;font-weight:800;">
-          ${isFirst ? `Herzlich willkommen, ${escapeHtml(args.ownerName)}!` : `Zahlung erhalten, danke ${escapeHtml(args.ownerName)}!`}
-        </h1>
-        <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.75;">
-          ${isFirst
-            ? `Schön, dass du dabei bist! Deine Zahlung für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist eingegangen
-               und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte schnell und reibungslos an den Start geht.
-               Hier deine Übersicht:`
-            : `Deine Zahlung für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist eingegangen.
-          Hier deine Übersicht:`}
-        </p>
-      </td>
-    </tr>
-
-    <!-- Abrechnung -->
-    <tr>
-      <td style="padding:0 32px 24px 32px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
-          <tr><td style="padding:16px 20px;">
-            <table width="100%" cellpadding="0" cellspacing="0">
-              ${rows}
-              <tr><td colspan="2" style="border-top:1px solid #2a2620;padding:0;line-height:0;">&nbsp;</td></tr>
-              <tr>
-                <td style="padding:10px 12px 2px 0;color:#f2ede4;font-size:15px;font-weight:700;">Gezahlt</td>
-                <td style="padding:10px 0 2px 0;text-align:right;color:#e8c96a;font-size:18px;font-weight:800;white-space:nowrap;">${eur(args.totalPaid)}</td>
-              </tr>
-            </table>
-          </td></tr>
-        </table>
-      </td>
-    </tr>
-
-    ${discountBox}
-
-    <!-- Das ist alles enthalten -->
-    <tr>
-      <td style="padding:0 32px 24px 32px;">
-        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
-          <tr><td style="padding:16px 20px;">
-            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#f2ede4;text-transform:uppercase;letter-spacing:1px;">
-              Das alles ist für dich enthalten
-            </p>
-            ${included.map(e => `
-            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; ${e}
-            </p>`).join("")}
-          </td></tr>
-        </table>
-      </td>
-    </tr>
-
-    ${designSection}
-    ${legalSection}
-
-    <!-- Contact -->
+    ${inner}
     <tr>
       <td style="padding:0 32px 28px 32px;">
         <p style="margin:0 0 14px 0;font-size:15px;color:#cfc9bd;line-height:1.75;">
@@ -222,94 +49,250 @@ export const sendPaymentConfirmationEmail = internalAction({
         </p>
       </td>
     </tr>
-
-    <!-- Closing -->
     <tr>
       <td style="padding:0 32px 32px 32px;border-top:1px solid #2a2620;">
-        ${isFirst ? `<p style="margin:24px 0 0 0;color:#cfc9bd;font-size:15px;line-height:1.75;">
-          Wir freuen uns darauf, gemeinsam mit dir mehr Stammkunden zu gewinnen.
-          Danke für dein Vertrauen!
-        </p>` : ""}
-        <p style="margin:16px 0 0 0;color:#f2ede4;font-size:15px;font-weight:600;">
-          Dein LoyaltyCard-Team
-        </p>
+        <p style="margin:24px 0 0 0;color:#f2ede4;font-size:15px;font-weight:600;">Dein LoyaltyCard-Team</p>
       </td>
     </tr>
-
-    <!-- Footer -->
     <tr>
       <td style="background:#1c1a13;padding:18px 32px;text-align:center;">
-        <p style="margin:0;font-size:12px;color:#6b6558;">
-          LoyaltyCard &middot; Digitale Stempelkarten für lokale Shops
-        </p>
+        <p style="margin:0;font-size:12px;color:#6b6558;">LoyaltyCard &middot; Digitale Stempelkarten für lokale Shops</p>
       </td>
     </tr>
-
   </table>
   </td></tr>
 </table>
 </body>
 </html>`;
+}
 
-    const textLine = (label: string, list: number, paid: number) =>
-      hasDiscount && paid < list ? `- ${label}: ${eur(paid)} (statt ${eur(list)})` : `- ${label}: ${eur(paid)}`;
+const para = (html: string) => `
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <p style="margin:0;color:#cfc9bd;font-size:15px;line-height:1.75;">${html}</p>
+      </td>
+    </tr>`;
+
+const heading = (text: string) => `
+    <tr>
+      <td style="padding:36px 32px 16px 32px;">
+        <h1 style="margin:0;font-size:22px;color:#f2ede4;font-weight:800;">${text}</h1>
+      </td>
+    </tr>`;
+
+// Kasten mit Zeilen "Bezeichnung … Wert"
+function box(title: string, rows: [string, string][]): string {
+  return `
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#f2ede4;text-transform:uppercase;letter-spacing:1px;">${title}</p>
+            <table width="100%" cellpadding="0" cellspacing="0">
+              ${rows.map(([l, r]) => `
+              <tr>
+                <td style="padding:6px 12px 6px 0;color:#cfc9bd;font-size:14px;">${l}</td>
+                <td style="padding:6px 0;text-align:right;white-space:nowrap;color:#f2ede4;font-weight:600;font-size:14px;">${r}</td>
+              </tr>`).join("")}
+            </table>
+          </td></tr>
+        </table>
+      </td>
+    </tr>`;
+}
+
+function checklist(title: string, items: string[]): string {
+  return `
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background:#1c1a13;border-radius:12px;">
+          <tr><td style="padding:16px 20px;">
+            <p style="margin:0 0 10px 0;font-size:13px;font-weight:700;color:#f2ede4;text-transform:uppercase;letter-spacing:1px;">${title}</p>
+            ${items.map(e => `
+            <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
+              <span style="color:#c9a227;font-weight:700;">&bull;</span>&nbsp; ${e}
+            </p>`).join("")}
+          </td></tr>
+        </table>
+      </td>
+    </tr>`;
+}
+
+// Preisliste für Mails: "Free · bis 25 Kunden … €0/Monat"
+const tierRows = (): [string, string][] =>
+  TIERS.map(t => [`${t.name} &middot; ${tierRangeLabel(t.id)}`, `${eur(t.monthly)}/Monat`]);
+const tierTextLines = () => TIERS.map(t => `- ${t.name} (${tierRangeLabel(t.id)}): ${eur(t.monthly)}/Monat`);
+
+const INCLUDED = [
+  "Digitale Stempelkarte für deine Kunden, ohne App-Download",
+  "Individuelles Design: dein Logo, deine Farben, dein Look",
+  "Bonusprogramm mit mehreren Belohnungsstufen",
+  "QR-Code-Vorlagen für Theke und Aushang",
+  "Betriebs-Dashboard mit Scanner und Kunden-Statistiken",
+  "Persönlicher Support per WhatsApp und Telefon",
+  "Alle Updates und neuen Funktionen inklusive",
+];
+
+const LEGAL_ITEMS = [
+  "Impressum (Firmenname, Inhaber, Anschrift, Kontakt)",
+  "Umsatzsteuer-ID bzw. Steuernummer",
+  "Handelsregisternummer & Registergericht (falls eingetragen)",
+  "AGB deines Shops (falls vorhanden)",
+  "Datenschutzerklärung bzw. Datenschutz-Kontakt",
+];
+
+async function sendOwnerMail(to: string, subject: string, html: string, text: string): Promise<void> {
+  if (!RESEND_KEY) return;
+  const res = await fetch("https://api.resend.com/emails", {
+    method:  "POST",
+    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
+    body:    JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html, text }),
+  });
+  if (!res.ok) console.error(`Resend-Fehler ${res.status}: ${await res.text()}`);
+}
+
+export const sendWelcomeEmail = internalAction({
+  args: {
+    ownerEmail: v.string(),
+    ownerName:  v.string(),
+    shopName:   v.string(),
+    tier:       vTier,
+  },
+  handler: async (_ctx, args) => {
+    const t = tierInfo(args.tier as Tier);
+    const html = ownerMailShell("WILLKOMMEN",
+      heading(`Herzlich willkommen, ${escapeHtml(args.ownerName)}!`) +
+      para(`Schön, dass du dabei bist! <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist freigeschaltet
+         und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte schnell und reibungslos an den Start geht.`) +
+      box("Dein Tarif", [
+        ["Aktuelle Stufe", `${t.name} (${tierRangeLabel(t.id)})`],
+        ["Preis", `${eur(t.monthly)}/Monat`],
+      ]) +
+      para(`Der Preis richtet sich nach der Anzahl deiner Kunden mit Stempelkarte. Wächst du über eine Grenze,
+         sagen wir dir Bescheid und die neue Stufe gilt ab der nächsten Abrechnung. Abgebucht wird monatlich
+         über deine hinterlegte Zahlart.`) +
+      box("Alle Stufen", tierRows()) +
+      checklist("Das alles ist für dich enthalten", INCLUDED) +
+      para(`Zu deinem Paket gehört ein <strong>individuelles Design</strong> deiner Stempelkarte. Wir melden uns
+         <strong>innerhalb der nächsten 24 Stunden</strong> persönlich bei dir, damit deine Karte genauso aussieht,
+         wie du es dir vorstellst.`) +
+      checklist("Bitte halte diese Angaben bereit", LEGAL_ITEMS.map(escapeHtml)) +
+      para(`Diese Angaben brauchen wir für das Impressum, damit deine Stempelkarte rechtlich sauber online gehen kann.
+         Kein Stress, wir gehen alles gemeinsam mit dir durch.`),
+    );
 
     const text = [
-      isFirst ? `Herzlich willkommen, ${args.ownerName}!` : `Zahlung erhalten, danke ${args.ownerName}!`,
+      `Herzlich willkommen, ${args.ownerName}!`,
       ``,
-      isFirst
-        ? `Schön, dass du dabei bist! Deine Zahlung für "${args.shopName}" ist eingegangen und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte schnell und reibungslos an den Start geht. Deine Übersicht:`
-        : `Deine Zahlung für "${args.shopName}" ist eingegangen. Deine Übersicht:`,
+      `Schön, dass du dabei bist! "${args.shopName}" ist freigeschaltet und wir kümmern uns ab sofort darum, dass deine digitale Stempelkarte schnell und reibungslos an den Start geht.`,
       ``,
-      textLine(`LoyaltyCard ${planLabel}`, args.aboList, args.aboPaid),
-      ...(args.rewardCount > 0 ? [textLine(`Bonusprogramm (${args.rewardCount})`, args.rewardsList, args.rewardsPaid)] : []),
-      `Gezahlt: ${eur(args.totalPaid)}`,
+      `Dein Tarif: ${t.name} (${tierRangeLabel(t.id)}), ${eur(t.monthly)}/Monat`,
+      `Der Preis richtet sich nach der Anzahl deiner Kunden mit Stempelkarte. Wächst du über eine Grenze, sagen wir dir Bescheid und die neue Stufe gilt ab der nächsten Abrechnung.`,
       ``,
-      ...(hasDiscount ? [
-        `Dein Angebot ${args.discountCode}: Der Aktionspreis gilt nur für die erste Rechnung (dein erstes Jahr).`,
-        `Danach läuft dein Abo zum Normalpreis von ${eur(renewal)} pro ${periodTxt} weiter.`,
-        ``,
-      ] : []),
+      `Alle Stufen:`,
+      ...tierTextLines(),
+      ``,
       `Das alles ist enthalten:`,
-      ...included.map(e => `- ${e}`),
+      ...INCLUDED.map(e => `- ${e}`),
       ``,
-      ...(isFirst ? [
-        `Zu deinem Paket gehört ein individuelles Design deiner Stempelkarte.`,
-        `Wir melden uns innerhalb der nächsten 24 Stunden persönlich bei dir.`,
-        ``,
-        `Bitte halte diese Angaben bereit (für das Impressum):`,
-        `- Impressum (Firmenname, Inhaber, Anschrift, Kontakt)`,
-        `- Umsatzsteuer-ID bzw. Steuernummer`,
-        `- Handelsregisternummer & Registergericht (falls eingetragen)`,
-        `- AGB deines Shops (falls vorhanden)`,
-        `- Datenschutzerklärung bzw. Datenschutz-Kontakt`,
-        ``,
-      ] : []),
+      `Zu deinem Paket gehört ein individuelles Design deiner Stempelkarte.`,
+      `Wir melden uns innerhalb der nächsten 24 Stunden persönlich bei dir.`,
+      ``,
+      `Bitte halte diese Angaben bereit (für das Impressum):`,
+      ...LEGAL_ITEMS.map(e => `- ${e}`),
+      ``,
       `Fragen? WhatsApp oder Anruf: ${WHATSAPP_NR}`,
       ``,
       `Dein LoyaltyCard-Team`,
       `LoyaltyCard · Digitale Stempelkarten für lokale Shops`,
     ].join("\n");
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method:  "POST",
-      headers: {
-        "Authorization": `Bearer ${RESEND_KEY}`,
-        "Content-Type":  "application/json",
-      },
-      body: JSON.stringify({
-        from:    FROM_EMAIL,
-        to:      [args.ownerEmail],
-        subject: isFirst
-          ? `Willkommen bei LoyaltyCard! Zahlung erhalten für ${args.shopName} (${eur(args.totalPaid)})`
-          : `Zahlung erhalten: ${args.shopName} (${eur(args.totalPaid)})`,
-        html,
-        text,
-      }),
-    });
-    if (!res.ok) {
-      console.error(`Resend-Fehler ${res.status}: ${await res.text()}`);
-    }
+    await sendOwnerMail(args.ownerEmail, `Willkommen bei LoyaltyCard, ${args.shopName} ist freigeschaltet`, html, text);
+  },
+});
+
+export const sendPaymentConfirmationEmail = internalAction({
+  args: {
+    ownerEmail: v.string(),
+    ownerName:  v.string(),
+    shopName:   v.string(),
+    planType:   v.union(v.literal("annual"), v.literal("monthly")),
+    tier:       vTier,
+    totalPaid:  v.number(),
+  },
+  handler: async (_ctx, args) => {
+    const t      = tierInfo(args.tier as Tier);
+    const period = args.planType === "annual" ? "Jahr" : "Monat";
+    const list   = t.monthly * (args.planType === "annual" ? 12 : 1);
+    const html = ownerMailShell("ZAHLUNGSBEST&Auml;TIGUNG",
+      heading(`Zahlung erhalten, danke ${escapeHtml(args.ownerName)}!`) +
+      para(`Deine Zahlung für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong> ist eingegangen. Hier deine Übersicht:`) +
+      box("Abrechnung", [
+        [`LoyaltyCard ${t.name} (${tierRangeLabel(t.id)})`, `${eur(list)}/${period}`],
+        ["Gezahlt", eur(args.totalPaid)],
+      ]),
+    );
+    const text = [
+      `Zahlung erhalten, danke ${args.ownerName}!`,
+      ``,
+      `Deine Zahlung für "${args.shopName}" ist eingegangen.`,
+      `- LoyaltyCard ${t.name} (${tierRangeLabel(t.id)}): ${eur(list)}/${period}`,
+      `Gezahlt: ${eur(args.totalPaid)}`,
+      ``,
+      `Fragen? WhatsApp oder Anruf: ${WHATSAPP_NR}`,
+      ``,
+      `Dein LoyaltyCard-Team`,
+    ].join("\n");
+    await sendOwnerMail(args.ownerEmail, `Zahlung erhalten: ${args.shopName} (${eur(args.totalPaid)})`, html, text);
+  },
+});
+
+export const sendTierChangeEmail = internalAction({
+  args: {
+    ownerEmail: v.string(),
+    ownerName:  v.string(),
+    shopName:   v.string(),
+    oldTier:    vTier,
+    newTier:    vTier,
+    cardCount:  v.number(),
+  },
+  handler: async (_ctx, args) => {
+    const oldT = tierInfo(args.oldTier as Tier);
+    const newT = tierInfo(args.newTier as Tier);
+    const up   = newT.monthly > oldT.monthly;
+    const shop = escapeHtml(args.shopName);
+    const html = ownerMailShell("DEIN TARIF",
+      heading(up ? `Glückwunsch, ${shop} wächst!` : `Dein Tarif wurde angepasst`) +
+      para(up
+        ? `Du hast jetzt <strong style="color:#f2ede4;">${args.cardCount} Kunden</strong> mit Stempelkarte, das ist mehr, als in
+           <strong>${oldT.name}</strong> enthalten ist. Deshalb gilt ab deiner <strong>nächsten Abrechnung</strong> die Stufe
+           <strong style="color:#e8c96a;">${newT.name}</strong>. Du musst nichts tun, alle deine Kunden und Karten bleiben, wie sie sind.`
+        : `Du hast jetzt <strong style="color:#f2ede4;">${args.cardCount} Kunden</strong> mit Stempelkarte. Ab deiner
+           <strong>nächsten Abrechnung</strong> gilt deshalb die günstigere Stufe <strong style="color:#e8c96a;">${newT.name}</strong>.`) +
+      box("Neuer Tarif", [
+        ["Bisher", `${oldT.name} &middot; ${eur(oldT.monthly)}/Monat`],
+        ["Ab nächster Abrechnung", `${newT.name} &middot; ${eur(newT.monthly)}/Monat`],
+      ]) +
+      box("Alle Stufen", tierRows()),
+    );
+    const text = [
+      up ? `Glückwunsch, ${args.shopName} wächst!` : `Dein Tarif wurde angepasst`,
+      ``,
+      `Du hast jetzt ${args.cardCount} Kunden mit Stempelkarte. Ab deiner nächsten Abrechnung gilt die Stufe ${newT.name} (${eur(newT.monthly)}/Monat) statt ${oldT.name} (${eur(oldT.monthly)}/Monat).`,
+      ...(up ? [`Du musst nichts tun, alle deine Kunden und Karten bleiben, wie sie sind.`] : []),
+      ``,
+      `Alle Stufen:`,
+      ...tierTextLines(),
+      ``,
+      `Fragen? WhatsApp oder Anruf: ${WHATSAPP_NR}`,
+      ``,
+      `Dein LoyaltyCard-Team`,
+    ].join("\n");
+    await sendOwnerMail(
+      args.ownerEmail,
+      up ? `${args.shopName}: neue Stufe ${newT.name} ab nächster Abrechnung` : `${args.shopName}: Tarif angepasst`,
+      html, text,
+    );
   },
 });
 
@@ -440,7 +423,7 @@ export const sendPartnerWelcomeEmail = internalAction({
               Deine Konditionen
             </p>
             <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
-              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; 35% Provision auf den Abo-Anteil im ersten Jahr
+              <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; 35% Provision auf den Monatsbeitrag in den ersten 12 bezahlten Monaten
             </p>
             <p style="margin:6px 0;color:#cfc9bd;font-size:14px;">
               <span style="color:#c9a227;font-weight:700;">✓</span>&nbsp; Danach dauerhaft 15%, solange der Shop aktiv bleibt
@@ -470,7 +453,7 @@ export const sendPartnerWelcomeEmail = internalAction({
       `Deine Anfrage ist geprüft und dein Zugang ist ab sofort freigeschaltet.`,
       ``,
       `Deine Konditionen:`,
-      `- 35% Provision auf den Abo-Anteil im ersten Jahr`,
+      `- 35% Provision auf den Monatsbeitrag in den ersten 12 bezahlten Monaten`,
       `- danach dauerhaft 15%, solange der Shop aktiv bleibt`,
       ...(args.referralCode ? [`- dein Partner-Code: ${args.referralCode}`] : []),
       ``,

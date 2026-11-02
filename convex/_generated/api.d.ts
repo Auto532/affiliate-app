@@ -13,7 +13,6 @@ import type * as adminAuth from "../adminAuth.js";
 import type * as affiliateAuth from "../affiliateAuth.js";
 import type * as affiliates from "../affiliates.js";
 import type * as commissionEngine from "../commissionEngine.js";
-import type * as discounts from "../discounts.js";
 import type * as emails from "../emails.js";
 import type * as htmlEscape from "../htmlEscape.js";
 import type * as http from "../http.js";
@@ -39,7 +38,6 @@ declare const fullApi: ApiFromModules<{
   affiliateAuth: typeof affiliateAuth;
   affiliates: typeof affiliates;
   commissionEngine: typeof commissionEngine;
-  discounts: typeof discounts;
   emails: typeof emails;
   htmlEscape: typeof htmlEscape;
   http: typeof http;

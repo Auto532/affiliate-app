@@ -5,10 +5,10 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import type { MutationCtx } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { internal } from "./_generated/api";
-import { recordPaymentCore } from "./payments";
+import { recordPaymentCore, activateContractCore } from "./payments";
 import { derivePasswordHash, newSalt } from "./passwords";
 import { isValidEmail } from "./validation";
-import { recurringPrice, rewardPrice, discountedInvoice, REWARD_PRICE_PER_MONTH } from "./pricing";
+import { planPrice, contractTier, tierForCardCount, tierInfo, ANNUAL_OFFERED, type Tier } from "./pricing";
 import { isCommissionPayable, commissionPayableAt } from "./commissionEngine";
 
 // ── Admin-Login (PIN → Sitzungs-Schlüssel) ──────────────────────────────────
@@ -213,8 +213,6 @@ async function getOrCreateDirectAffiliate(ctx: any) {
     passwordSalt: salt,
     referralCode: "DIRECT",
     status:       "active" as const,
-    // Rabattcodes (z.B. LOYAL50) sollen für Admin-Shops immer eingebbar sein
-    discountEligible: true,
   });
   return ctx.db.get(id);
 }
@@ -228,8 +226,9 @@ export const createDirectShopContract = mutation({
     ownerPhone:          v.optional(v.string()),
     city:                v.optional(v.string()),
     businessType:        v.optional(v.string()),
-    planType:            v.union(v.literal("annual"), v.literal("monthly")),
-    rewardCount:         v.optional(v.number()),
+    planType:            v.optional(v.union(v.literal("annual"), v.literal("monthly"))),
+    // Bestehender Shop kann schon Kunden haben → Startstufe danach
+    cardCount:           v.optional(v.number()),
     loatycardShopId:     v.string(),
     loatycardShopSlug:   v.string(),
     loatycardAdminToken: v.optional(v.string()),
@@ -263,21 +262,22 @@ export const createDirectShopContract = mutation({
       loatycardShopId:     args.loatycardShopId,
       loatycardShopSlug:   args.loatycardShopSlug,
       loatycardAdminToken: args.loatycardAdminToken,
-      rewardCount:         Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0))),
     });
 
     const paymentToken = crypto.randomUUID();
-    const rewardCount  = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
+    const planType     = ANNUAL_OFFERED ? (args.planType ?? "monthly") : "monthly";
+    const cardCount    = Math.max(0, Math.floor(args.cardCount ?? 0));
     await ctx.db.insert("shopContracts", {
       shopLeadId:    leadId,
       affiliateId:   affiliate._id,
-      planType:      args.planType,
+      planType,
       contractStart: now,
       status:        "active",
       paymentCount:  0,
       paymentToken,
       isDirect:      true,
-      rewardCount,
+      cardCount,
+      tier:          tierForCardCount(cardCount),
     });
 
     await ctx.db.insert("auditLog", {
@@ -285,11 +285,11 @@ export const createDirectShopContract = mutation({
       entityId:   leadId,
       action:     "admin_direct_created",
       actorType:  "admin",
-      note:       `${args.shopName} · Plan: ${args.planType} · Shop-ID: ${args.loatycardShopId}`,
+      note:       `${args.shopName} · Plan: ${planType} · Shop-ID: ${args.loatycardShopId}`,
     });
 
-    // Kein Telegram beim Anlegen — die Meldung kommt erst mit dem
-    // Zahlungseingang bzw. bei "Später zahlen".
+    // Kein Telegram beim Anlegen — die Meldung kommt erst mit der
+    // Freischaltung bzw. bei "Später zahlen".
     return { paymentToken };
   },
 });
@@ -405,8 +405,7 @@ export const approveLead = mutation({
   args: {
     adminSecret:     v.string(),
     leadId:          v.id("shopLeads"),
-    planType:        v.union(v.literal("annual"), v.literal("monthly")),
-    rewardCount:     v.optional(v.number()),
+    planType:        v.optional(v.union(v.literal("annual"), v.literal("monthly"))),
     loatycardShopId: v.optional(v.string()),
     adminName:       v.optional(v.string()),
   },
@@ -417,16 +416,18 @@ export const approveLead = mutation({
     if (!lead) throw new ConvexError("Lead nicht gefunden");
     if (lead.status === "active") throw new ConvexError("Shop ist bereits aktiv");
 
-    // ShopContract anlegen
+    // ShopContract anlegen (neuer Shop = 0 Karten = Free)
+    const planType = ANNUAL_OFFERED ? (args.planType ?? "monthly") : "monthly";
     await ctx.db.insert("shopContracts", {
       shopLeadId:    args.leadId,
       affiliateId:   lead.affiliateId,
-      planType:      args.planType,
+      planType,
       contractStart: Date.now(),
       status:        "active",
       paymentCount:  0,
       paymentToken:  crypto.randomUUID(),
-      rewardCount:   Math.max(0, Math.min(20, Math.round(args.rewardCount ?? lead.rewardCount ?? 0))),
+      cardCount:     0,
+      tier:          "free",
     });
 
     await ctx.db.patch(args.leadId, {
@@ -441,7 +442,7 @@ export const approveLead = mutation({
       entityId:   args.leadId,
       action:     "approved",
       actorType:  "admin",
-      note:       `Plan: ${args.planType}, genehmigt von ${args.adminName ?? "Admin"}`,
+      note:       `Plan: ${planType}, genehmigt von ${args.adminName ?? "Admin"}`,
     });
   },
 });
@@ -474,9 +475,11 @@ export const rejectLead = mutation({
 
 // ── Zahlung manuell erfassen (z.B. Barzahlung/Überweisung) ────────────────────
 // Läuft über DENSELBEN Kern wie Stripe-Webhook und Test-Zahlung
-// (payments.recordPaymentCore): Rabatt, Direktvertrieb 0%, Deckelung,
+// (payments.recordPaymentCore): Direktvertrieb 0%, Deckelung,
 // Umsatz-paidAmount, Bestätigungs-Mail und Telegram gelten damit auch hier.
-// Bei Zahlung #1 wird der Stempelkarten-Shop automatisch angelegt.
+// Noch nicht freigeschaltete Verträge werden dabei freigeschaltet (Shop wird
+// angelegt). Gebucht wird ein Monat zum aktuellen Stufenpreis; bei Free
+// (0 €) wird nur freigeschaltet.
 
 export const recordPayment = mutation({
   args: {
@@ -486,18 +489,21 @@ export const recordPayment = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx, args.adminSecret);
 
+    const activation = await activateContractCore(ctx, {
+      shopContractId: args.shopContractId,
+      method:         "manuell",
+    });
     const result = await recordPaymentCore(ctx, {
       shopContractId: args.shopContractId,
       paymentRef:     `manual-${Date.now()}`,
       method:         "manuell",
     });
-    if (!result) throw new ConvexError("Zahlung konnte nicht erfasst werden (Vertrag inaktiv oder bereits verbucht)");
-
-    if (result.paymentNumber === 1) {
-      await ctx.scheduler.runAfter(0, internal.payments.provisionShop, { shopContractId: args.shopContractId });
+    if (!result) {
+      if (activation.activated) return { amount: 0, phase: "initial", rate: 0, paidAmount: 0, activatedOnly: true };
+      throw new ConvexError("Zahlung konnte nicht erfasst werden (Vertrag inaktiv, Stufe Free oder bereits verbucht)");
     }
 
-    return { amount: result.amount, phase: result.phase, rate: result.rate, paidAmount: result.paidAmount };
+    return { amount: result.amount, phase: result.phase, rate: result.rate, paidAmount: result.paidAmount, activatedOnly: false };
   },
 });
 
@@ -611,23 +617,22 @@ export const getEarningsSummary = query({
     const commPaid      = commissions.filter(c => c.status === "paid")     .reduce((s, c) => s + c.amount, 0);
     const commTotal     = commPending + commConfirmed + commPaid;
 
-    // Vertrags-Aufschlüsselung: „wirklich aktiv" heißt mindestens eine Zahlung.
-    // Aktive Verträge ohne Zahlung warten noch auf den Bezahllink.
+    // Vertrags-Aufschlüsselung: „live" heißt freigeschaltet (Bezahldaten
+    // hinterlegt bzw. vom Admin aktiviert, ältere Verträge: mind. eine Zahlung).
+    // Aktive Verträge ohne Freischaltung warten noch auf den Bezahllink.
     const active  = contracts.filter(c => c.status === "active");
-    const paying  = active.filter(c => c.paymentCount > 0);
+    const paying  = active.filter(c => !!c.activatedAt || c.paymentCount > 0);
     const payingMonthly = paying.filter(c => c.planType === "monthly");
     const payingAnnual  = paying.filter(c => c.planType === "annual");
 
-    // Laufender Abo-Umsatz aus zahlenden Verträgen (Listenpreise inkl.
-    // Bonusprogramm, ohne Erstjahr-Rabatt): Jahresabos anteilig mit 1/12.
-    const monthlyRunRate =
-      payingMonthly.reduce((s, c) => s + recurringPrice("monthly", c.rewardCount ?? 0), 0) +
-      payingAnnual .reduce((s, c) => s + recurringPrice("annual",  c.rewardCount ?? 0) / 12, 0);
+    // Laufender Abo-Umsatz aus den aktuellen Preisstufen: Jahresabos anteilig mit 1/12.
+    const monthlyPlanRunRate = payingMonthly.reduce((s, c) => s + planPrice("monthly", contractTier(c)), 0);
+    const annualPlanRunRate  = payingAnnual .reduce((s, c) => s + planPrice("annual",  contractTier(c)), 0);
+    const monthlyRunRate     = monthlyPlanRunRate + annualPlanRunRate / 12;
 
-    // Getrennt nach Abo-Modell: Jahresabos in €/Jahr, Monatsabos in €/Monat —
-    // leichter zu lesen als der gemischte Monats-Durchschnitt.
-    const monthlyPlanRunRate = payingMonthly.reduce((s, c) => s + recurringPrice("monthly", c.rewardCount ?? 0), 0);
-    const annualPlanRunRate  = payingAnnual .reduce((s, c) => s + recurringPrice("annual",  c.rewardCount ?? 0), 0);
+    // Anzahl live geschalteter Shops je Preisstufe
+    const tierCounts: Record<Tier, number> = { free: 0, starter: 0, business: 0, premium: 0 };
+    for (const c of paying) tierCounts[contractTier(c)]++;
 
     return {
       revenueTotal:   Math.round(revenueTotal   * 100) / 100,
@@ -646,6 +651,7 @@ export const getEarningsSummary = query({
       yearlyRunRate:   Math.round(monthlyRunRate * 12 * 100) / 100,
       monthlyPlanRunRate: Math.round(monthlyPlanRunRate * 100) / 100,
       annualPlanRunRate:  Math.round(annualPlanRunRate  * 100) / 100,
+      tierCounts,
     };
   },
 });
@@ -676,7 +682,6 @@ export const getEarningsDetail = query({
         commission:       c.amount,
         commissionStatus: c.status,
         direct:           contract?.isDirect === true,
-        discountCode:     (c.paymentNumber === 1 && contract?.discountCode) ? contract.discountCode : null,
       };
     }));
 
@@ -739,7 +744,7 @@ export const getContractForLead = query({
   },
 });
 
-// ── Vertrag für Stempelkarten-Shop (Bonusprogramm nachträglich einstellen) ────
+// ── Vertrag für Stempelkarten-Shop (Vertrag-Tab im Admin) ──────────────────────
 
 export const getContractForShop = query({
   args: { adminSecret: v.string(), loatycardShopId: v.string() },
@@ -756,10 +761,11 @@ export const getContractForShop = query({
       .unique();
     if (!contract) return null;
 
-    const rewardCount = contract.rewardCount ?? 0;
+    const tier  = contractTier(contract);
+    const price = planPrice(contract.planType, tier);
 
-    // Zahlungshistorie für die Vertragskarte im Admin: Abschluss = Zahlung #1,
-    // Verlängerung = letzte Zahlung + Abrechnungsperiode. Jede Zahlung legt
+    // Zahlungshistorie für die Vertragskarte im Admin: nächste Abbuchung =
+    // letzte Zahlung + Abrechnungsperiode. Jede Zahlung legt
     // eine commissions-Row an (auch Direktvertrieb mit Rate 0).
     const payments = (await ctx.db
       .query("commissions")
@@ -775,29 +781,25 @@ export const getContractForShop = query({
       nextRenewalAt = d.getTime();
     }
 
-    const amountDue = contract.paymentCount === 0
-      ? (contract.firstYearDiscount
-          ? discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
-          : recurringPrice(contract.planType, rewardCount))
-      : 0;
+    const activated = !!contract.activatedAt || contract.paymentCount > 0;
 
     return {
       contractId:        contract._id,
       leadId:            lead._id,
       planType:          contract.planType,
-      rewardCount,
+      tier,
+      tierName:          tierInfo(tier).name,
+      cardCount:         contract.cardCount ?? 0,
       paymentCount:      contract.paymentCount,
       status:            contract.status,
-      recurringPrice:    recurringPrice(contract.planType, rewardCount),
-      rewardUnitPrice:   rewardPrice(contract.planType),
-      rewardPricePerMonth: REWARD_PRICE_PER_MONTH,
-      discountCode:      contract.discountCode ?? null,
-      firstYearDiscount: contract.firstYearDiscount ?? null,
+      recurringPrice:    price,
+      activated,
+      activatedAt:       contract.activatedAt ?? null,
+      hasStripe:         !!contract.stripeSubscriptionId,
       // Zahlungsstatus + Historie für die Vertragskarte
       paymentToken:      contract.paymentToken ?? "",
       payLaterAt:        contract.payLaterAt ?? null,
       contractStart:     contract.contractStart,
-      amountDue,
       firstPaidAt,
       lastPaidAt:        lastPaid?.triggeredAt ?? null,
       nextRenewalAt,
@@ -811,58 +813,12 @@ export const getContractForShop = query({
   },
 });
 
-// Bonusprogramm (Anzahl Belohnungen) nachträglich ändern. Fließt sofort in alle
-// künftigen Abrechnungen ein (Abo-Betrag wird aus contract.rewardCount berechnet).
-// Steht noch die ERSTE Zahlung aus und ist ein Rabattcode hinterlegt, werden
-// Listen- und Rabattpreis der Erstrechnung neu berechnet (Rabatt gilt weiter).
-export const updateContractRewardCount = mutation({
-  args: {
-    adminSecret: v.string(),
-    contractId:  v.id("shopContracts"),
-    rewardCount: v.number(),
-  },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx, args.adminSecret);
-
-    const contract = await ctx.db.get(args.contractId);
-    if (!contract) throw new ConvexError("Vertrag nicht gefunden");
-
-    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount)));
-    const oldCount    = contract.rewardCount ?? 0;
-
-    await ctx.db.patch(args.contractId, { rewardCount });
-    const lead = await ctx.db.get(contract.shopLeadId);
-    if (lead) await ctx.db.patch(lead._id, { rewardCount });
-
-    // Erste Zahlung noch offen + Rabatt hinterlegt → Erstrechnung neu berechnen,
-    // damit Zahlungsseite und Stripe-Checkout den korrekten Betrag zeigen.
-    if (contract.paymentCount === 0 && contract.firstYearDiscount) {
-      const normalPrice = recurringPrice(contract.planType, rewardCount);
-      await ctx.db.patch(args.contractId, {
-        normalPrice,
-        discountedPrice: discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
-      });
-    }
-
-    await ctx.db.insert("auditLog", {
-      entityType: "shopContract",
-      entityId:   args.contractId,
-      action:     "reward_count_changed",
-      actorType:  "admin",
-      note:       `Bonusprogramm: ${oldCount} → ${rewardCount} Belohnung(en)${lead ? ` · ${lead.shopName}` : ""}`,
-    });
-
-    return { rewardCount };
-  },
-});
-
-// Automatischer Abrechnungs-Sync aus der Stempelkarten-App (HTTP /sync-reward-count):
-// rewardCount folgt den ECHTEN Bonus-Stufen des Shops. Gezählt werden nur aktive
-// Zusatz-Stufen oberhalb der Basis-Belohnung und nur bei eingeschaltetem
-// Bonusprogramm-Toggle — die Basis-Belohnung ist immer kostenlos. Läuft bei
-// jeder Stufen-/Toggle-Änderung, egal ob Admin oder Inhaber sie macht.
-export const syncRewardCountForShop = internalMutation({
-  args: { loatycardShopId: v.string(), rewardCount: v.number() },
+// Automatischer Abrechnungs-Sync aus der Stempelkarten-App (HTTP /sync-card-count):
+// Die Anzahl der Kunden (verschiedene E-Mail-Adressen) bestimmt die Preisstufe. Rutscht ein Shop über
+// (oder unter) eine Grenze, gilt die neue Stufe ab der nächsten Abrechnung:
+// Stripe-Abo wird angepasst, Inhaber bekommt eine Mail, Admin ein Telegram.
+export const syncCardCountForShop = internalMutation({
+  args: { loatycardShopId: v.string(), cardCount: v.number() },
   handler: async (ctx, args) => {
     const lead = (await ctx.db.query("shopLeads").collect())
       .find(l => l.loatycardShopId === args.loatycardShopId);
@@ -874,31 +830,52 @@ export const syncRewardCountForShop = internalMutation({
       .unique();
     if (!contract || contract.status !== "active") return { synced: false, reason: "kein aktiver Vertrag" };
 
-    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount)));
-    const oldCount    = contract.rewardCount ?? 0;
-    if (rewardCount === oldCount) return { synced: true, rewardCount, unchanged: true };
+    const cardCount = Math.max(0, Math.floor(args.cardCount));
+    const oldTier   = contractTier(contract);
+    const newTier   = tierForCardCount(cardCount);
 
-    await ctx.db.patch(contract._id, { rewardCount });
-    await ctx.db.patch(lead._id, { rewardCount });
-
-    // Erste Zahlung noch offen + Rabatt hinterlegt → Erstrechnung neu berechnen
-    if (contract.paymentCount === 0 && contract.firstYearDiscount) {
-      const normalPrice = recurringPrice(contract.planType, rewardCount);
-      await ctx.db.patch(contract._id, {
-        normalPrice,
-        discountedPrice: discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount),
-      });
+    if (newTier === oldTier) {
+      if (cardCount !== contract.cardCount || !contract.tier) {
+        await ctx.db.patch(contract._id, { cardCount, tier: newTier });
+      }
+      // Stripe-Preis trotzdem abgleichen (repariert fehlgeschlagene oder
+      // überholte Updates; tut nichts, wenn der Preis schon stimmt).
+      if (contract.stripeSubscriptionId) {
+        await ctx.scheduler.runAfter(0, internal.payments.updateStripeTier, { shopContractId: contract._id });
+      }
+      return { synced: true, tier: newTier, unchanged: true };
     }
 
+    await ctx.db.patch(contract._id, { cardCount, tier: newTier, tierChangedAt: Date.now() });
     await ctx.db.insert("auditLog", {
       entityType: "shopContract",
       entityId:   contract._id,
-      action:     "reward_count_synced",
+      action:     "tier_changed",
       actorType:  "system",
-      note:       `Bonus-Stufen im Shop geändert: ${oldCount} → ${rewardCount} Belohnung(en) · ${lead.shopName}`,
+      note:       `${tierInfo(oldTier).name} → ${tierInfo(newTier).name} · ${cardCount} Kunden · ${lead.shopName}`,
     });
 
-    return { synced: true, rewardCount };
+    await ctx.scheduler.runAfter(0, internal.payments.updateStripeTier, { shopContractId: contract._id });
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyTierChange, {
+      shopName:  lead.shopName,
+      oldTier:   tierInfo(oldTier).name,
+      newTier:   tierInfo(newTier).name,
+      cardCount,
+      newPrice:  tierInfo(newTier).monthly,
+      hasStripe: !!contract.stripeSubscriptionId,
+    });
+    if (lead.ownerEmail && (contract.activatedAt || contract.paymentCount > 0)) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendTierChangeEmail, {
+        ownerEmail: lead.ownerEmail,
+        ownerName:  lead.ownerName || "Inhaber",
+        shopName:   lead.shopName,
+        oldTier,
+        newTier,
+        cardCount,
+      });
+    }
+
+    return { synced: true, tier: newTier };
   },
 });
 
@@ -910,14 +887,12 @@ export const getPayLaterList = query({
     await requireAdmin(ctx, args.adminSecret);
 
     const contracts = (await ctx.db.query("shopContracts").collect())
-      .filter(c => c.payLaterAt && c.paymentCount === 0 && c.status === "active");
+      .filter(c => c.payLaterAt && !c.activatedAt && c.paymentCount === 0 && c.status === "active");
 
     const rows = await Promise.all(contracts.map(async c => {
-      const lead        = await ctx.db.get(c.shopLeadId);
-      const rewardCount = c.rewardCount ?? 0;
-      const amount      = c.firstYearDiscount
-        ? discountedInvoice(c.planType, rewardCount, c.firstYearDiscount)
-        : recurringPrice(c.planType, rewardCount);
+      const lead   = await ctx.db.get(c.shopLeadId);
+      const tier   = contractTier(c);
+      const amount = planPrice(c.planType, tier);
       return {
         contractId:   c._id,
         shopName:     lead?.shopName ?? "—",
@@ -925,7 +900,7 @@ export const getPayLaterList = query({
         ownerEmail:   lead?.ownerEmail ?? "",
         ownerPhone:   lead?.ownerPhone ?? "",
         planType:     c.planType,
-        rewardCount,
+        tierName:     tierInfo(tier).name,
         amount,
         payLaterAt:   c.payLaterAt!,
         paymentToken: c.paymentToken ?? "",
@@ -937,8 +912,8 @@ export const getPayLaterList = query({
 });
 
 // ── Zahlungsstatus je Stempelkarten-Shop (für die Shop-Übersicht im Admin) ────
-// Liefert für jeden verknüpften Shop, ob die erste Zahlung noch offen ist,
-// inkl. fälligem Betrag (Rabatt eingerechnet) und "Später zahlen"-Vormerkung.
+// Liefert für jeden verknüpften Shop, ob er freigeschaltet ist (Bezahldaten
+// hinterlegt), seine Preisstufe und eine evtl. "Später zahlen"-Vormerkung.
 
 export const getPayStatusForShops = query({
   args: { adminSecret: v.string() },
@@ -955,16 +930,16 @@ export const getPayStatusForShops = query({
         .unique();
       if (!contract || contract.status !== "active") return null;
 
-      const rewardCount = contract.rewardCount ?? 0;
-      const amountDue   = contract.firstYearDiscount
-        ? discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
-        : recurringPrice(contract.planType, rewardCount);
+      const tier      = contractTier(contract);
+      const activated = !!contract.activatedAt || contract.paymentCount > 0;
 
       return {
         loatycardShopId: lead.loatycardShopId!,
-        paid:            contract.paymentCount > 0,
+        paid:            activated,
         payLater:        !!contract.payLaterAt,
-        amountDue:       contract.paymentCount > 0 ? 0 : amountDue,
+        tier,
+        tierName:        tierInfo(tier).name,
+        price:           planPrice(contract.planType, tier),
         paymentToken:    contract.paymentToken ?? "",
       };
     }));
@@ -1079,22 +1054,6 @@ export const rejectProfileChange = mutation({
   },
 });
 
-// ── Rabatt-Berechtigung pro Partner (Admin-Toggle) ───────────────────────────
-
-export const setDiscountEligible = mutation({
-  args: { adminSecret: v.string(), affiliateId: v.id("affiliates"), eligible: v.boolean() },
-  handler: async (ctx, args) => {
-    await requireAdmin(ctx, args.adminSecret);
-    await ctx.db.patch(args.affiliateId, { discountEligible: args.eligible });
-    await ctx.db.insert("auditLog", {
-      entityType: "affiliate",
-      entityId:   args.affiliateId,
-      action:     args.eligible ? "discount_enabled" : "discount_disabled",
-      actorType:  "admin",
-    });
-  },
-});
-
 // ── Partner-Detail (Admin-Popup) ─────────────────────────────────────────────
 
 export const getAffiliateDetail = query({
@@ -1203,23 +1162,35 @@ export const getPartnerCommissionStatement = query({
   },
 });
 
-// ── Einmalige Migration (2026-11-01): Einrichtungsgebühr abgeschafft ────────────
-// Offene Verträge (noch keine Zahlung) mit Rabattcode tragen gespeicherte
-// normalPrice/discountedPrice inkl. der alten Gebühr. Neu berechnen.
-export const recomputeOpenContractPrices = internalMutation({
+// ── Einmalige Migration (2026-11-02): Preisstufen statt Bonus-Aufpreis ─────────
+// Räumt die alten Felder (Rabattcodes, Bonus-Anzahl) aus allen Datensätzen
+// und setzt fehlende Preisstufen. Die echte Kundenzahl liefert danach die
+// Stempelkarten-App (billingSync.resyncAllCardCounts).
+export const migrateToTierPricing = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const contracts = await ctx.db.query("shopContracts").collect();
-    let updated = 0;
-    for (const c of contracts) {
-      if (c.paymentCount !== 0 || !c.firstYearDiscount) continue;
-      const rewardCount = c.rewardCount ?? 0;
+    let contracts = 0, leads = 0, affiliates = 0;
+    for (const c of await ctx.db.query("shopContracts").collect()) {
       await ctx.db.patch(c._id, {
-        normalPrice:     recurringPrice(c.planType, rewardCount),
-        discountedPrice: discountedInvoice(c.planType, rewardCount, c.firstYearDiscount),
+        tier:              c.tier ?? tierForCardCount(c.cardCount ?? 0),
+        rewardCount:       undefined,
+        discountCode:      undefined,
+        firstYearDiscount: undefined,
+        normalPrice:       undefined,
+        discountedPrice:   undefined,
       });
-      updated++;
+      contracts++;
     }
-    return { updated };
+    for (const l of await ctx.db.query("shopLeads").collect()) {
+      if (l.rewardCount === undefined) continue;
+      await ctx.db.patch(l._id, { rewardCount: undefined });
+      leads++;
+    }
+    for (const a of await ctx.db.query("affiliates").collect()) {
+      if (a.discountEligible === undefined) continue;
+      await ctx.db.patch(a._id, { discountEligible: undefined });
+      affiliates++;
+    }
+    return { contracts, leads, affiliates };
   },
 });

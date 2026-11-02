@@ -21,14 +21,15 @@ http.route({
   }),
 });
 
-// Abrechnungs-Sync aus der Stempelkarten-App: hält contract.rewardCount mit den
-// echten Bonus-Stufen des Shops synchron (siehe admin.syncRewardCountForShop).
+// Abrechnungs-Sync aus der Stempelkarten-App: meldet die Anzahl der
+// Kunden eines Shops (verschiedene E-Mail-Adressen), daraus folgt die Preisstufe
+// (siehe admin.syncCardCountForShop).
 http.route({
-  path:    "/sync-reward-count",
+  path:    "/sync-card-count",
   method:  "POST",
   handler: httpAction(async (ctx, req) => {
     const body = await req.json();
-    const { secret, loatycardShopId, rewardCount } = body;
+    const { secret, loatycardShopId, cardCount } = body;
 
     // Eigener Brücken-Schlüssel statt Admin-PIN (BRIDGE_SECRET in beiden Apps)
     if (!isValidBridgeSecret(secret)) {
@@ -38,9 +39,17 @@ http.route({
       });
     }
 
-    const result = await ctx.runMutation(internal.admin.syncRewardCountForShop, {
+    const count = Number(cardCount);
+    if (!Number.isFinite(count) || count < 0) {
+      return new Response(JSON.stringify({ error: "Bad request" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const result = await ctx.runMutation(internal.admin.syncCardCountForShop, {
       loatycardShopId: String(loatycardShopId ?? ""),
-      rewardCount:     Number(rewardCount ?? 0),
+      cardCount:       Math.floor(count),
     });
     return new Response(JSON.stringify(result), {
       headers: { "Content-Type": "application/json" },

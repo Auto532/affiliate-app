@@ -1,7 +1,5 @@
 // ── Provisions-Regeln ────────────────────────────────────────────────────────
 
-import { planPrice } from "./pricing";
-
 // Widerrufsfrist: Eine Provision wird erst 14 Tage nach der Zahlungsbestätigung
 // des Shops (commission.triggeredAt = Zahlungseingang) zur Auszahlung
 // freigegeben. Vorher kann sie nicht bestätigt/ausgezahlt werden.
@@ -17,13 +15,13 @@ export function isCommissionPayable(triggeredAt: number, now: number = Date.now(
 export type CommissionPhase = "initial" | "year2" | "year3" | "year4_plus";
 
 interface CommissionRule {
-  phase:      CommissionPhase;
-  rate:       number;
-  baseAmount: number;
-  amount:     number;
+  phase: CommissionPhase;
+  rate:  number;
 }
 
-// Bestimmt Phase + Rate anhand des Plan-Typs und der Zahlungsnummer
+// Bestimmt Phase + Rate anhand des Plan-Typs und der Zahlungsnummer.
+// Gezählt werden nur echte (bezahlte) Zahlungen, Free-Monate zu 0 € zählen
+// nicht: Ein Partner bekommt die 35 % also für die ersten 12 bezahlten Monate.
 export function resolveCommissionRule(
   planType: "annual" | "monthly",
   paymentNumber: number,
@@ -54,11 +52,7 @@ export function resolveCommissionRule(
     year4_plus: 0.15,
   };
 
-  const baseAmount = planPrice(planType);
-  const rate       = rateMap[phase];
-  const amount     = Math.round(baseAmount * rate * 100) / 100;
-
-  return { phase, rate, baseAmount, amount };
+  return { phase, rate: rateMap[phase] };
 }
 
 // Lesbare Bezeichnung für UI. Optional mit der tatsächlich gebuchten Rate der

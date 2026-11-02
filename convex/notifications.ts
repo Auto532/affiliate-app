@@ -37,8 +37,8 @@ export const notifyPayLater = internalAction({
   },
 });
 
-// Zahlung eingegangen. Feuert bei Direktvertriebs-Zahlungen und Verlängerungen;
-// die erste Partner-Zahlung meldet stattdessen provisionShop ("Shop ist live").
+// Zahlung eingegangen (jede echte Zahlung > 0 €). Die Freischaltung eines
+// Shops meldet provisionShop ("Shop ist live").
 // Beim bloßen Anlegen/Einreichen eines Shops geht bewusst KEIN Telegram raus.
 export const notifyPaymentReceived = internalAction({
   args: {
@@ -54,7 +54,7 @@ export const notifyPaymentReceived = internalAction({
   },
   handler: async (_ctx, args): Promise<void> => {
     const planLabel = args.planType === "annual" ? "Jahresabo" : "Monatsabo";
-    const kind      = args.paymentNumber === 1 ? "Erste Zahlung" : `Verlängerung (Zahlung #${args.paymentNumber})`;
+    const kind      = args.paymentNumber === 1 ? "Erste Zahlung" : `Zahlung #${args.paymentNumber}`;
     const provLine  = args.isDirect
       ? `🏢 Direktvertrieb, keine Provision`
       : `🤝 Provision: €${args.commissionAmount} (${Math.round(args.commissionRate * 100)}%)`;
@@ -66,6 +66,58 @@ export const notifyPaymentReceived = internalAction({
       `💳 <b>Betrag:</b> €${args.amount} (${planLabel}, ${kind})\n` +
       provLine +
       (args.wasPayLater ? `\n\n⏳→✔️ Der Shop hatte "Später zahlen" gewählt, jetzt erledigt.` : "")
+    );
+  },
+});
+
+// Stripe-Abbuchung fehlgeschlagen (Lastschrift zurückgegeben, Karte abgelehnt).
+export const notifyPaymentFailed = internalAction({
+  args: {
+    shopName:  v.string(),
+    ownerName: v.string(),
+    amount:    v.number(),
+    attempt:   v.number(),
+  },
+  handler: async (_ctx, args): Promise<void> => {
+    await sendTelegram(
+      `⚠️ <b>Abbuchung fehlgeschlagen</b>
+
+` +
+      `🏪 <b>Shop:</b> ${escapeHtml(args.shopName)}
+` +
+      `👤 <b>Inhaber:</b> ${escapeHtml(args.ownerName)}
+` +
+      `💳 <b>Betrag:</b> €${args.amount} (Versuch ${args.attempt})
+
+` +
+      `Stripe versucht es automatisch erneut. Details im Stripe-Dashboard.`
+    );
+  },
+});
+
+// Shop hat eine Kartengrenze überschritten → neue Preisstufe ab nächster Abrechnung.
+export const notifyTierChange = internalAction({
+  args: {
+    shopName:   v.string(),
+    oldTier:    v.string(),
+    newTier:    v.string(),
+    cardCount:  v.number(),
+    newPrice:   v.number(),
+    hasStripe:  v.boolean(),
+  },
+  handler: async (_ctx, args): Promise<void> => {
+    await sendTelegram(
+      `📈 <b>Preisstufe geändert</b>
+
+` +
+      `🏪 <b>Shop:</b> ${escapeHtml(args.shopName)}
+` +
+      `👥 <b>Kunden:</b> ${args.cardCount}
+` +
+      `🔁 ${escapeHtml(args.oldTier)} → <b>${escapeHtml(args.newTier)}</b> (€${args.newPrice}/Monat ab nächster Abrechnung)` +
+      (args.hasStripe ? "" : `
+
+❗ Kein Stripe-Abo hinterlegt, bitte manuell abrechnen.`)
     );
   },
 });

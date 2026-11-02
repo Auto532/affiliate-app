@@ -6,24 +6,12 @@ import { api } from "@/convex/_generated/api";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import QRCode from "react-qr-code";
+import { nextCommission } from "@/app/lib/nextCommission";
+import TierTable from "@/app/lib/TierTable";
+import { tierInfo } from "@/convex/pricing";
 
 const APP_URL     = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL     ?? "http://localhost:3000";
 const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
-
-function nextCommission(planType: "annual" | "monthly", paymentCount: number, firstYearDiscount?: number | null) {
-  const next = paymentCount + 1;
-  const phase =
-    planType === "annual"
-      ? next === 1 ? "initial" : next === 2 ? "year2" : next === 3 ? "year3" : "year4_plus"
-      : next <= 12 ? "initial" : next <= 24 ? "year2" : next <= 36 ? "year3" : "year4_plus";
-  const rates: Record<string, number> = { initial: 0.35, year2: 0.15, year3: 0.15, year4_plus: 0.15 };
-  // Provision nur auf den GEZAHLTEN Abo-Anteil: Rabattcodes gibt es nur für das
-  // Jahresabo und dort nur auf Zahlung #1
-  const inPromo = !!firstYearDiscount && planType === "annual" && next === 1;
-  const base = (planType === "annual" ? 240 : 20) * (inPromo ? 1 - firstYearDiscount! : 1);
-  const amount = Math.round(base * rates[phase] * 100) / 100;
-  return { amount, rate: rates[phase] };
-}
 
 export default function ShopDetailPage() {
   const params   = useParams();
@@ -60,8 +48,8 @@ export default function ShopDetailPage() {
   const contract   = (lead as any).contract;
   const payLink    = contract?.paymentToken ? `${APP_URL}/pay/${contract.paymentToken}` : null;
   const shopLink   = lead.loatycardShopSlug ? `${STEMPEL_URL}/join/${lead.loatycardShopSlug}` : null;
-  const next       = contract ? nextCommission(contract.planType, contract.paymentCount, contract.firstYearDiscount) : null;
-  const isPaid     = contract && contract.paymentCount > 0;
+  const next       = contract ? nextCommission(contract.planType, contract.tier, contract.paymentCount) : null;
+  const isPaid     = contract && contract.activated;
 
   const handleCopy = () => {
     if (!payLink) return;
@@ -104,14 +92,14 @@ export default function ShopDetailPage() {
         }`}>{statusLabel[lead.status] ?? lead.status}</span>
       </div>
 
-      {/* Zahlungslink — nur vor erster Zahlung */}
+      {/* Freischalt-Link — nur bis zur Freischaltung */}
       {payLink && !isPaid && !lead.loatycardShopId && (
         <div className="rounded-2xl p-4 space-y-3"
           style={{ background: "#17150f", border: "1px solid rgba(201,162,39,.25)" }}>
           <div>
-            <p className="text-xs font-semibold text-[#c9a227] mb-1">Zahlungslink für den Inhaber</p>
+            <p className="text-xs font-semibold text-[#c9a227] mb-1">Freischalt-Link für den Inhaber</p>
             <p className="text-[11px] text-[rgba(242,237,228,.4)]">
-              Schick diesen Link an {lead.ownerName}, er zahlt direkt online.
+              Schick diesen Link an {lead.ownerName}. Dort werden einmal die Zahlungsdaten hinterlegt (SEPA oder Karte), danach ist der Shop live. Bis 25 Kunden kostet es nichts.
             </p>
           </div>
           <div className="rounded-xl px-3 py-2.5 flex items-center gap-2"
@@ -124,7 +112,7 @@ export default function ShopDetailPage() {
             </button>
           </div>
           <div className="flex gap-2">
-            <a href={`mailto:${lead.ownerEmail}?subject=Dein LoyaltyCard Zahlungslink&body=Hallo ${lead.ownerName},%0A%0Ahier ist dein persönlicher Zahlungslink:%0A${payLink}%0A%0ABei Fragen melde dich gerne.`}
+            <a href={`mailto:${lead.ownerEmail}?subject=Deine LoyaltyCard freischalten&body=Hallo ${lead.ownerName},%0A%0Ahier ist dein persönlicher Link zum Freischalten deiner Stempelkarte (bis 25 Kunden kostenlos):%0A${payLink}%0A%0ABei Fragen melde dich gerne.`}
               className="flex-1 py-2.5 rounded-xl text-xs font-semibold text-center transition-colors"
               style={{ background: "rgba(201,162,39,.1)", border: "1px solid rgba(201,162,39,.2)", color: "#c9a227" }}>
               Per E-Mail
@@ -141,7 +129,7 @@ export default function ShopDetailPage() {
           <Link href="/dashboard/shops"
             className="block w-full py-2.5 rounded-xl text-xs font-semibold text-center mt-1"
             style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.08)", color: "rgba(242,237,228,.4)" }}>
-            Kunde zahlt später, zur Übersicht
+            Inhaber schaltet später frei, zur Übersicht
           </Link>
 
           {showQR && (
@@ -150,7 +138,7 @@ export default function ShopDetailPage() {
                 <QRCode value={payLink} size={180} />
               </div>
               <p className="text-[10px] text-[rgba(242,237,228,.3)] text-center">
-                Kamera draufhalten, öffnet den Zahlungslink direkt
+                Kamera draufhalten, öffnet den Freischalt-Link direkt
               </p>
             </div>
           )}
@@ -179,10 +167,14 @@ export default function ShopDetailPage() {
           style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.06)" }}>
           <p className="text-xs font-semibold text-[rgba(242,237,228,.3)] uppercase tracking-wider">Vertrag</p>
           <div className="flex items-center justify-between">
-            <p className="text-sm text-[rgba(242,237,228,.6)]">Plan</p>
+            <p className="text-sm text-[rgba(242,237,228,.6)]">Stufe</p>
             <p className="text-sm font-semibold text-[#f2ede4]">
-              {contract.planType === "annual" ? "Jahresabo (€240)" : "Monatsabo (€20)"}
+              {tierInfo(contract.tier).name} (€{tierInfo(contract.tier).monthly}/Monat)
             </p>
+          </div>
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-[rgba(242,237,228,.6)]">Kunden mit Stempelkarte</p>
+            <p className="text-sm font-semibold text-[#f2ede4]">{contract.cardCount ?? 0}</p>
           </div>
           <div className="flex items-center justify-between">
             <p className="text-sm text-[rgba(242,237,228,.6)]">Zahlungen</p>
@@ -192,9 +184,12 @@ export default function ShopDetailPage() {
             <div className="flex items-center justify-between pt-2"
               style={{ borderTop: "1px solid rgba(255,255,255,.06)" }}>
               <p className="text-sm text-[rgba(242,237,228,.6)]">Nächste Provision</p>
-              <p className="text-sm font-bold text-[#c9a227]">€{next.amount.toFixed(2)}</p>
+              <p className="text-sm font-bold text-[#c9a227]">
+                {next.amount > 0 ? `€${next.amount.toFixed(2)}` : "ab Stufe Starter"}
+              </p>
             </div>
           )}
+          <TierTable current={contract.tier} showCommission />
         </div>
       )}
 

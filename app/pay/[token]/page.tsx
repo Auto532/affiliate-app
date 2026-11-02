@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { useState } from "react";
 import TestPaymentButton from "./TestPaymentButton"; // ⚠️ TEST-ONLY — vor Live-Schaltung entfernen
 import { errMsg } from "@/app/lib/errMsg";
+import { TIERS, tierRangeLabel } from "@/convex/pricing";
 
 export default function PayPage() {
   const params = useParams();
@@ -13,31 +14,11 @@ export default function PayPage() {
 
   const info                  = useQuery(api.payments.getByPaymentToken, { token });
   const createStripe          = useAction(api.payments.createStripeCheckout);
-  const applyDiscount         = useAction(api.payments.applyDiscountCode);
   const requestPayLater       = useMutation(api.payments.requestPayLater);
 
   const [payLaterLoading, setPayLaterLoading] = useState(false);
   const [stripeLoading, setStripeLoading] = useState(false);
   const [error, setError]                 = useState("");
-  const [code, setCode]                   = useState("");
-  const [discountLoading, setDiscountLoading] = useState(false);
-  const [discountMsg, setDiscountMsg]     = useState<{ ok: boolean; text: string } | null>(null);
-
-  const handleApplyDiscount = async () => {
-    if (!code.trim()) return;
-    setDiscountLoading(true); setDiscountMsg(null);
-    try {
-      // Nur der eingetippte String geht raus — der Server entscheidet über den Rabatt.
-      const res = await applyDiscount({ paymentToken: token, code });
-      if (res.valid) {
-        setDiscountMsg({ ok: true, text: `${res.label} aktiviert, du zahlst €${res.discountedPrice} statt €${res.normalPrice}.` });
-      } else {
-        setDiscountMsg({ ok: false, text: res.reason ?? "Code ungültig" });
-      }
-    } catch (e: any) {
-      setDiscountMsg({ ok: false, text: errMsg(e, "Fehler") });
-    } finally { setDiscountLoading(false); }
-  };
 
   if (info === undefined) return (
     <div className="min-h-screen flex items-center justify-center">
@@ -54,7 +35,7 @@ export default function PayPage() {
     </div>
   );
 
-  if (info.paymentCount > 0) return (
+  if (info.activated) return (
     <div className="min-h-screen flex items-center justify-center px-4">
       <div className="w-full max-w-sm text-center space-y-5">
         <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto"
@@ -64,9 +45,9 @@ export default function PayPage() {
           </svg>
         </div>
         <div>
-          <h2 className="text-xl font-bold text-[#f2ede4]">Zahlung abgeschlossen</h2>
+          <h2 className="text-xl font-bold text-[#f2ede4]">Alles erledigt</h2>
           <p className="text-sm text-[rgba(242,237,228,.5)] mt-2">
-            Deine LoyaltyCard-Stempelkarte wird eingerichtet.
+            Deine Zahlungsdaten sind hinterlegt und deine LoyaltyCard-Stempelkarte wird eingerichtet.
           </p>
         </div>
       </div>
@@ -84,7 +65,7 @@ export default function PayPage() {
     }
   };
 
-  const planLabel = info.planType === "annual" ? "Jahresabo" : "Monatsabo";
+  const isFree = info.amount === 0;
 
   return (
     <div className="min-h-screen max-w-md mx-auto px-4 py-10 space-y-6 flex flex-col justify-center">
@@ -92,93 +73,48 @@ export default function PayPage() {
       {/* Header */}
       <div className="text-center space-y-1">
         <div className="text-xs font-bold tracking-[.3em] text-[#c9a227] uppercase">LoyaltyCard</div>
-        <h1 className="text-2xl font-bold text-[#f2ede4]">Zahlung abschließen</h1>
+        <h1 className="text-2xl font-bold text-[#f2ede4]">{isFree ? "Kostenlos starten" : "Zahlung einrichten"}</h1>
       </div>
 
-      {/* Bestellübersicht */}
+      {/* Tarif-Übersicht */}
       <div className="rounded-2xl p-4 space-y-3"
         style={{ background: "#17150f", border: "1px solid rgba(201,162,39,.25)" }}>
         <div className="flex items-center justify-between">
           <div>
             <p className="font-semibold text-[#f2ede4]">{info.shopName}</p>
-            <p className="text-xs text-[rgba(242,237,228,.4)]">LoyaltyCard {planLabel}</p>
+            <p className="text-xs text-[rgba(242,237,228,.4)]">Start: {info.tierName} ({info.tierRange})</p>
           </div>
           <div className="text-right">
-            {info.firstYearDiscount ? (
-              <>
-                <p className="text-xs text-[rgba(242,237,228,.35)] line-through">€{info.normalPrice}</p>
-                <p className="text-2xl font-bold text-[#c9a227]">€{info.payableAmount}</p>
-              </>
-            ) : (
-              <p className="text-2xl font-bold text-[#c9a227]">€{info.payableAmount}</p>
-            )}
+            <p className="text-2xl font-bold text-[#c9a227]">€{info.amount}</p>
+            <p className="text-[10px] text-[rgba(242,237,228,.4)]">pro Monat</p>
           </div>
         </div>
 
-        {/* Aufschlüsselung */}
+        {/* Alle Stufen */}
         <div className="space-y-1.5 pt-2 border-t border-[rgba(255,255,255,.06)]">
-          <div className="flex justify-between text-xs">
-            <span className="text-[rgba(242,237,228,.5)]">{planLabel}</span>
-            <span className="text-[rgba(242,237,228,.7)]">€{info.aboPrice}</span>
-          </div>
-          {info.rewardCount > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-[rgba(242,237,228,.5)]">
-                Bonusprogramm ({info.rewardCount} Belohnung{info.rewardCount === 1 ? "" : "en"})
+          {TIERS.map(t => (
+            <div key={t.id} className="flex justify-between text-xs">
+              <span className={t.id === info.tier ? "text-[#e8c96a] font-semibold" : "text-[rgba(242,237,228,.5)]"}>
+                {t.name} · {tierRangeLabel(t.id)}
               </span>
-              <span className="text-[rgba(242,237,228,.7)]">€{info.rewardsPrice}</span>
+              <span className={t.id === info.tier ? "text-[#e8c96a] font-semibold" : "text-[rgba(242,237,228,.7)]"}>
+                {t.monthly === 0 ? "kostenlos" : `€${t.monthly}/Monat`}
+              </span>
             </div>
-          )}
-          <div className="flex justify-between text-xs">
-            <span className="text-[rgba(242,237,228,.5)]">Einrichtung & individuelles Design</span>
+          ))}
+          <div className="flex justify-between text-xs pt-1">
+            <span className="text-[rgba(242,237,228,.5)]">Einrichtung, Design & Bonusprogramm</span>
             <span className="text-green-400">inklusive</span>
           </div>
-          {info.firstYearDiscount ? (
-            <div className="flex justify-between text-xs">
-              <span className="text-green-400">Rabatt {info.discountCode ?? ""} (−{Math.round(info.firstYearDiscount * 100)}%)</span>
-              <span className="text-green-400">−€{Math.round((info.normalPrice - info.payableAmount) * 100) / 100}</span>
-            </div>
-          ) : null}
         </div>
 
-        {info.firstYearDiscount && (
-          <div className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold"
-            style={{ background: "rgba(34,197,94,.12)", border: "1px solid rgba(34,197,94,.3)", color: "#4ade80" }}>
-            −{Math.round(info.firstYearDiscount * 100)}% {info.discountCode ?? "Rabatt"} · nur 1. Jahr
-          </div>
-        )}
-        {info.planType === "annual" && (
-          <p className="text-[10px] text-[rgba(242,237,228,.3)]">Einmalige Jahreszahlung · automatisch verlängerbar{info.firstYearDiscount ? " (ab Jahr 2 zum Normalpreis)" : ""}</p>
-        )}
-        {info.planType === "monthly" && (
-          <p className="text-[10px] text-[rgba(242,237,228,.3)]">Monatliche Zahlung · jederzeit kündbar</p>
-        )}
-        {info.paymentCount > 0 && (
-          <p className="text-[10px] text-[rgba(242,237,228,.3)]">Zahlung #{info.paymentCount + 1}</p>
-        )}
+        <p className="text-[11px] leading-relaxed text-[rgba(242,237,228,.45)]">
+          {isFree
+            ? "Bis 25 Kunden zahlst du nichts. Du hinterlegst nur einmal deine Zahlungsdaten (SEPA-Lastschrift oder Karte). Erst wenn du mehr Kunden hast, gilt automatisch die nächste Stufe, wir sagen dir vorher Bescheid."
+            : "Der Betrag wird monatlich über deine hinterlegte Zahlart abgebucht. Wächst du in eine höhere Stufe, sagen wir dir vorher Bescheid."}
+        </p>
+        <p className="text-[10px] text-[rgba(242,237,228,.3)]">Monatliche Abrechnung · jederzeit kündbar</p>
       </div>
-
-      {/* Rabattcode */}
-      {info.paymentCount === 0 && (
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <input
-              value={code}
-              onChange={e => setCode(e.target.value)}
-              placeholder="Rabattcode"
-              className="flex-1 px-4 py-3 bg-[#17150f] border border-[rgba(255,255,255,.08)] rounded-xl text-[#f2ede4] placeholder-[rgba(242,237,228,.3)] focus:outline-none focus:border-[rgba(201,162,39,.4)] text-sm uppercase tracking-wider"
-            />
-            <button onClick={handleApplyDiscount} disabled={discountLoading || !code.trim()}
-              className="px-5 py-3 rounded-xl text-sm font-semibold text-[#0d0c0a] disabled:opacity-40"
-              style={{ background: "linear-gradient(120deg, #e8c96a, #c9a227)" }}>
-              {discountLoading ? "..." : "Einlösen"}
-            </button>
-          </div>
-          {discountMsg && (
-            <p className={`text-xs ${discountMsg.ok ? "text-green-400" : "text-red-400"}`}>{discountMsg.text}</p>
-          )}
-        </div>
-      )}
 
       {/* Stripe */}
       <div className="space-y-3">
@@ -193,7 +129,7 @@ export default function PayPage() {
                 <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
                 <line x1="1" y1="10" x2="23" y2="10" />
               </svg>
-              Mit Karte / SEPA zahlen
+              {isFree ? "Zahlungsdaten hinterlegen" : "Mit SEPA-Lastschrift / Karte zahlen"}
             </>
           )}
         </button>
@@ -211,14 +147,14 @@ export default function PayPage() {
           disabled={payLaterLoading}
           className="w-full py-3 rounded-2xl text-sm font-semibold text-[rgba(242,237,228,.7)] disabled:opacity-50"
           style={{ background: "#17150f", border: "1px solid rgba(255,255,255,.12)" }}>
-          {payLaterLoading ? "Wird vorgemerkt..." : "Später zahlen"}
+          {payLaterLoading ? "Wird vorgemerkt..." : "Später einrichten"}
         </button>
       )}
       {info.payLaterAt ? (
         <div className="rounded-xl px-4 py-3 text-sm"
           style={{ background: "rgba(201,162,39,.08)", border: "1px solid rgba(201,162,39,.3)", color: "#e8c96a" }}>
-          Alles klar, die Zahlung ist zum späteren Abschluss vorgemerkt. Dieser Link
-          bleibt gültig, du kannst jederzeit hierher zurückkommen und bezahlen.
+          Alles klar, das ist zum späteren Abschluss vorgemerkt. Dieser Link
+          bleibt gültig, du kannst jederzeit hierher zurückkommen.
         </div>
       ) : null}
 
@@ -229,7 +165,7 @@ export default function PayPage() {
       <TestPaymentButton token={token} />{/* ⚠️ TEST-ONLY — vor Live-Schaltung entfernen */}
 
       <p className="text-center text-[10px] text-[rgba(242,237,228,.2)]">
-        Sichere Zahlung · SSL-verschlüsselt · LoyaltyCard GmbH
+        Sichere Zahlung über Stripe · SSL-verschlüsselt · LoyaltyCard GmbH
       </p>
     </div>
   );

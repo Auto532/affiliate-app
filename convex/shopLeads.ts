@@ -3,6 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { v, ConvexError } from "convex/values";
 import { requireValidEmail, requireFilled } from "./validation";
 import { commissionPayableAt, isCommissionPayable } from "./commissionEngine";
+import { contractTier, ANNUAL_OFFERED } from "./pricing";
 
 export const submitLead = mutation({
   args: {
@@ -13,8 +14,8 @@ export const submitLead = mutation({
     ownerPhone:       v.optional(v.string()),
     businessType:     v.optional(v.string()),
     city:             v.optional(v.string()),
-    planType:         v.union(v.literal("annual"), v.literal("monthly")),
-    rewardCount:      v.optional(v.number()),
+    // Nur Monatsabo; das Jahresabo wird erst ab dem 2. Jahr angeboten.
+    planType:         v.optional(v.union(v.literal("annual"), v.literal("monthly"))),
   },
   handler: async (ctx, args) => {
     const affiliate = await requireAffiliateSession(ctx, args.token);
@@ -25,8 +26,9 @@ export const submitLead = mutation({
 
     // Gleiche Inhaber-E-Mail für mehrere Shops ist erlaubt (ein Inhaber kann
     // mehrere Läden haben) — eindeutig sein müssen nur Endkunden pro Shop.
-    const now         = Date.now();
-    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
+    const now      = Date.now();
+    // Jahresabo wird erst ab dem 2. Jahr angeboten → bis dahin serverseitig gesperrt
+    const planType = ANNUAL_OFFERED ? (args.planType ?? "monthly") : "monthly";
 
     const leadId = await ctx.db.insert("shopLeads", {
       affiliateId:      affiliate._id,
@@ -38,18 +40,19 @@ export const submitLead = mutation({
       city:             args.city,
       source:           "direct_form",
       status:           "pending_payment",
-      rewardCount,
     });
 
     await ctx.db.insert("shopContracts", {
       shopLeadId:    leadId,
       affiliateId:   affiliate._id,
-      planType:      args.planType,
+      planType,
       contractStart: now,
       status:        "active",
       paymentCount:  0,
       paymentToken:  crypto.randomUUID(),
-      rewardCount,
+      // Neuer Shop = 0 Kunden = Free
+      cardCount:     0,
+      tier:          "free",
     });
 
     await ctx.db.insert("auditLog", {
@@ -58,11 +61,11 @@ export const submitLead = mutation({
       action:     "submitted_and_activated",
       actorType:  "affiliate",
       actorId:    affiliate._id,
-      note:       `${affiliate.name} · Plan: ${args.planType}`,
+      note:       `${affiliate.name} · Plan: ${planType}`,
     });
 
     // Bewusst KEINE Mail und KEIN Telegram beim Einreichen: beides kommt erst
-    // mit dem Zahlungseingang (autoRecordPayment bzw. provisionShop).
+    // mit der Freischaltung (payments.activateContractCore bzw. provisionShop).
     return leadId;
   },
 });
@@ -104,7 +107,6 @@ export const acceptInvite = mutation({
     businessType: v.optional(v.string()),
     city:         v.optional(v.string()),
     planType:     v.optional(v.union(v.literal("annual"), v.literal("monthly"))),
-    rewardCount:  v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const lead = await ctx.db
@@ -122,9 +124,8 @@ export const acceptInvite = mutation({
     const ownerEmail = requireValidEmail(args.ownerEmail);
 
     // Gleiche Inhaber-E-Mail für mehrere Shops ist erlaubt, siehe submitLead.
-    const now         = Date.now();
-    const planType    = args.planType ?? "annual";
-    const rewardCount = Math.max(0, Math.min(20, Math.round(args.rewardCount ?? 0)));
+    const now      = Date.now();
+    const planType = ANNUAL_OFFERED ? (args.planType ?? "monthly") : "monthly";
 
     await ctx.db.patch(lead._id, {
       shopName,
@@ -135,7 +136,6 @@ export const acceptInvite = mutation({
       city:             args.city,
       status:           "pending_payment",
       inviteAcceptedAt: now,
-      rewardCount,
     });
 
     await ctx.db.insert("shopContracts", {
@@ -146,7 +146,8 @@ export const acceptInvite = mutation({
       status:        "active",
       paymentCount:  0,
       paymentToken:  crypto.randomUUID(),
-      rewardCount,
+      cardCount:     0,
+      tier:          "free",
     });
 
     await ctx.db.insert("auditLog", {
@@ -177,6 +178,10 @@ export const deletePendingLead = mutation({
       .query("shopContracts")
       .withIndex("by_shopLead", q => q.eq("shopLeadId", args.leadId))
       .unique();
+    // Schon freigeschaltet (Bezahldaten bei Stripe hinterlegt) → nicht mehr löschbar
+    if (contract && (contract.activatedAt || contract.stripeSubscriptionId || contract.paymentCount > 0)) {
+      throw new ConvexError("Dieser Shop ist bereits freigeschaltet und kann nicht mehr gelöscht werden");
+    }
     if (contract) await ctx.db.delete(contract._id);
     await ctx.db.delete(args.leadId);
   },
@@ -206,7 +211,17 @@ export const myLeads = query({
       // Login-Schlüssel des Shops gehört nicht in den Partner-Browser. Der
       // paymentToken bleibt: der Partner schickt dem Inhaber den Zahlungslink.
       const { loatycardAdminToken: _adminToken, inviteToken: _inviteToken, ...safeLead } = lead;
-      return { ...safeLead, contract };
+      if (!contract) return { ...safeLead, contract: null };
+      // Stripe-Kennungen gehören ebenfalls nicht in den Partner-Browser.
+      const { stripeSubscriptionId: _sub, stripeCustomerId: _cus, ...safeContract } = contract;
+      return {
+        ...safeLead,
+        contract: {
+          ...safeContract,
+          tier:      contractTier(contract),
+          activated: !!contract.activatedAt || contract.paymentCount > 0,
+        },
+      };
     }));
 
     return result;

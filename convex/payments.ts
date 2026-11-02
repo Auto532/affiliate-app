@@ -3,8 +3,7 @@ import { v, ConvexError } from "convex/values";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { resolveCommissionRule } from "./commissionEngine";
-import { planPrice, rewardPrice, discountedInvoice, recurringPrice, discountAppliesTo, applyDiscount } from "./pricing";
-import { lookupDiscount } from "./discounts";
+import { planPrice, contractTier, tierInfo, tierRangeLabel } from "./pricing";
 import { escapeHtml } from "./htmlEscape";
 
 // Provisions-Basis: "paid" = Provision auf tatsächlich gezahlten Betrag (Default),
@@ -15,6 +14,7 @@ function commissionBase(): "paid" | "full" {
 
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? "";
 const STRIPE_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET ?? "";
+const STRIPE_API_VERSION = "2026-06-24.dahlia" as const;
 const APP_URL        = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "http://localhost:3000";
 const TG_TOKEN       = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TG_CHAT_ID     = process.env.TELEGRAM_CHAT_ID   ?? "";
@@ -40,40 +40,28 @@ export const getByPaymentToken = query({
     if (!contract) return null;
     const lead = await ctx.db.get(contract.shopLeadId);
 
-    // Rechnungsbestandteile: Abo + Bonusprogramm (keine Einrichtungsgebühr).
-    // Mit Rabattcode: Prozent-Rabatt auf Abo + Bonus.
-    // Rabatt-Laufzeit: Jahresabo nur Rechnung #1; Monatsabo Rechnungen #1-12
-    // (das erste Jahr, z.B. 10 € statt 20 € pro Monat).
-    const rewardCount  = contract.rewardCount ?? 0;
-    const d            = contract.firstYearDiscount ?? 0;
-    const inPromo      = !!d && discountAppliesTo(contract.planType, contract.paymentCount + 1);
-    const aboPrice     = planPrice(contract.planType);
-    const rewardsPrice = rewardPrice(contract.planType) * rewardCount;
-    const normalPrice  = aboPrice + rewardsPrice; // Listenbetrag dieser Rechnung
-    const payableAmount = inPromo ? discountedInvoice(contract.planType, rewardCount, d) : normalPrice;
+    // Preis = aktuelle Stufe (nach Kundenzahl). Neue Shops starten mit 0 Kunden,
+    // also Free (0 €): Der Inhaber hinterlegt nur IBAN/Karte, abgebucht wird
+    // erst, wenn er in eine bezahlte Stufe wächst.
+    const tier  = contractTier(contract);
+    const price = planPrice(contract.planType, tier);
 
     return {
-      contractId: contract._id,
-      planType:   contract.planType,
-      shopName:   lead?.shopName ?? "LoyaltyCard Shop",
-      ownerName:  lead?.ownerName ?? "",
-      amount:     normalPrice,     // Listenbetrag dieser Rechnung (Referenz)
-      payableAmount,               // tatsächlich zu zahlen
+      contractId:   contract._id,
+      planType:     contract.planType,
+      shopName:     lead?.shopName ?? "LoyaltyCard Shop",
+      ownerName:    lead?.ownerName ?? "",
+      tier,
+      tierName:     tierInfo(tier).name,
+      tierRange:    tierRangeLabel(tier),
+      cardCount:    contract.cardCount ?? 0,
+      amount:       price,
       paymentCount: contract.paymentCount,
-      // Aufschlüsselung für die Zahlungsseite
-      aboPrice,
-      rewardCount,
-      rewardUnitPrice: rewardPrice(contract.planType),
-      rewardsPrice,
-      // Rabatt-Status (nur Anzeige — verbindlich ist der Server). Nach Ablauf
-      // der Rabatt-Laufzeit (Monatsabo: ab Rechnung #13) nicht mehr ausweisen.
-      discountCode:      inPromo ? (contract.discountCode ?? null) : null,
-      firstYearDiscount: inPromo ? d : null,
-      normalPrice,
-      discountedPrice:   contract.discountedPrice ?? null,
-      payLaterAt:        contract.payLaterAt ?? null,
-      // "Später zahlen" gibt es nur bei Admin-Direkt-Shops (Partner-Shops zahlen sofort)
-      canPayLater:       contract.isDirect === true && contract.paymentCount === 0,
+      // Bezahldaten schon hinterlegt / Shop freigeschaltet → kein zweiter Checkout
+      activated:    !!contract.activatedAt || !!contract.stripeSubscriptionId,
+      payLaterAt:   contract.payLaterAt ?? null,
+      // "Später zahlen" gibt es nur bei Admin-Direkt-Shops
+      canPayLater:  contract.isDirect === true && !contract.activatedAt,
     };
   },
 });
@@ -81,8 +69,8 @@ export const getByPaymentToken = query({
 // ── "Später zahlen": Shop-Inhaber merkt die Zahlung zum späteren Abschluss vor ─
 // Der Link bleibt gültig; der Vertrag landet in der Admin-Shop-Übersicht
 // (Kategorie "Zahlung offen") und der Admin bekommt eine Telegram-Nachricht.
-// Es geht dabei bewusst KEINE Mail an den Inhaber raus, die kombinierte
-// Willkommens-/Bestätigungs-Mail kommt erst nach Zahlungseingang.
+// Es geht dabei bewusst KEINE Mail an den Inhaber raus, die Willkommens-Mail
+// kommt erst mit der Freischaltung.
 
 export const requestPayLater = mutation({
   args: { token: v.string() },
@@ -93,18 +81,15 @@ export const requestPayLater = mutation({
       .unique();
     if (!contract)                    throw new ConvexError("Ungültiger Zahlungslink");
     if (contract.status !== "active") throw new ConvexError("Vertrag ist nicht aktiv");
-    if (contract.paymentCount > 0)    throw new ConvexError("Bereits bezahlt");
-    // Nur bei Admin-Direkt-Shops: Partner-Shops zahlen direkt beim Abschluss.
+    if (contract.activatedAt)         throw new ConvexError("Bereits freigeschaltet");
+    // Nur bei Admin-Direkt-Shops: Partner-Shops hinterlegen direkt beim Abschluss.
     if (!contract.isDirect)           throw new ConvexError("Nicht verfügbar");
     if (contract.payLaterAt) return { alreadySet: true };
 
     await ctx.db.patch(contract._id, { payLaterAt: Date.now() });
 
-    const lead = await ctx.db.get(contract.shopLeadId);
-    const rewardCount = contract.rewardCount ?? 0;
-    const amount      = contract.firstYearDiscount
-      ? discountedInvoice(contract.planType, rewardCount, contract.firstYearDiscount)
-      : recurringPrice(contract.planType, rewardCount);
+    const lead   = await ctx.db.get(contract.shopLeadId);
+    const amount = planPrice(contract.planType, contractTier(contract));
 
     await ctx.db.insert("auditLog", {
       entityType: "shopContract",
@@ -125,11 +110,90 @@ export const requestPayLater = mutation({
   },
 });
 
+// ── Freischaltung (gemeinsamer Kern) ──────────────────────────────────────────
+// Ein Vertrag wird freigeschaltet, sobald der Inhaber seine Bezahldaten bei
+// Stripe hinterlegt hat (Checkout abgeschlossen), bzw. wenn der Admin ihn
+// manuell aktiviert (Überweisung, Test-Freischaltung). Ab dann ist der Shop
+// live und der Inhaber bekommt die Willkommens-Mail. Geld fließt erst mit den
+// monatlichen Stripe-Rechnungen (recordPaymentCore); Provision gibt es nur
+// für echte Zahlungen > 0 €. Idempotent: zweiter Aufruf tut nichts.
+
+export async function activateContractCore(
+  ctx: MutationCtx,
+  args: {
+    shopContractId: Id<"shopContracts">;
+    method: string;
+    stripeSubscriptionId?: string;
+    stripeCustomerId?: string;
+  },
+): Promise<{ activated: boolean; duplicateSubscription?: boolean; orphanSubscription?: boolean }> {
+  const contract = await ctx.db.get(args.shopContractId);
+  // Vertrag inzwischen gelöscht oder gekündigt → das neue Abo gehört zu nichts
+  if (!contract || contract.status !== "active") {
+    return { activated: false, orphanSubscription: !!args.stripeSubscriptionId };
+  }
+
+  // Hat der Vertrag schon ein ANDERES Abo, ist das neue ein Doppel (z. B. zwei
+  // Checkout-Tabs). Nicht überschreiben, der Webhook kündigt das neue Abo.
+  if (args.stripeSubscriptionId && contract.stripeSubscriptionId
+      && contract.stripeSubscriptionId !== args.stripeSubscriptionId) {
+    await ctx.db.insert("auditLog", {
+      entityType: "shopContract",
+      entityId:   contract._id,
+      action:     "duplicate_subscription",
+      actorType:  "system",
+      note:       `Zweites Stripe-Abo ${args.stripeSubscriptionId} erkannt und gekündigt (bestehend: ${contract.stripeSubscriptionId})`,
+    });
+    return { activated: false, duplicateSubscription: true };
+  }
+
+  if (args.stripeSubscriptionId && args.stripeCustomerId) {
+    await ctx.db.patch(contract._id, {
+      stripeSubscriptionId: args.stripeSubscriptionId,
+      stripeCustomerId:     args.stripeCustomerId,
+    });
+  }
+  if (contract.activatedAt) return { activated: false };
+
+  await ctx.db.patch(contract._id, { activatedAt: Date.now() });
+  await ctx.db.insert("auditLog", {
+    entityType: "shopContract",
+    entityId:   contract._id,
+    action:     "contract_activated",
+    actorType:  "system",
+    note:       `Freigeschaltet via ${args.method}`,
+  });
+
+  const lead = await ctx.db.get(contract.shopLeadId);
+  const tier = contractTier(contract);
+  if (lead?.ownerEmail) {
+    await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+      ownerEmail: lead.ownerEmail,
+      ownerName:  lead.ownerName || "Inhaber",
+      shopName:   lead.shopName || "Dein Shop",
+      tier,
+    });
+  }
+  // Shop in der Stempelkarten-App anlegen (+ Telegram "Neuer Shop ist live")
+  await ctx.scheduler.runAfter(0, internal.payments.provisionShop, { shopContractId: contract._id });
+  return { activated: true };
+}
+
+export const activateContract = internalMutation({
+  args: {
+    shopContractId:       v.id("shopContracts"),
+    method:               v.string(),
+    stripeSubscriptionId: v.optional(v.string()),
+    stripeCustomerId:     v.optional(v.string()),
+  },
+  handler: async (ctx, args) => activateContractCore(ctx, args),
+});
+
 // ── Zahlung erfassen (gemeinsamer Kern) ───────────────────────────────────────
-// EINZIGER Pfad für alle Zahlungseingänge: Stripe-Webhook, Test-Zahlung und
-// manuelle Erfassung im Admin (admin.recordPayment) laufen alle hier durch.
-// Damit gelten Idempotenz, Rabatt, Direktvertrieb-0%, Deckelung, Mail und
-// Telegram überall identisch.
+// EINZIGER Pfad für alle Zahlungseingänge: Stripe-Webhook (invoice.paid),
+// Test-Zahlung und manuelle Erfassung im Admin (admin.recordPayment) laufen
+// alle hier durch. Damit gelten Idempotenz, Direktvertrieb-0%, Deckelung,
+// Mail und Telegram überall identisch.
 
 export type RecordPaymentResult = {
   paymentNumber: number;
@@ -141,21 +205,31 @@ export type RecordPaymentResult = {
 
 export async function recordPaymentCore(
   ctx: MutationCtx,
-  args: { shopContractId: Id<"shopContracts">; paymentRef: string; method: string },
+  args: {
+    shopContractId: Id<"shopContracts">;
+    paymentRef: string;
+    method: string;
+    // Echter Betrag laut Stripe-Rechnung. Fehlt (manuell/Test) = Listenpreis der Stufe.
+    paidAmount?: number;
+  },
 ): Promise<RecordPaymentResult> {
     const contract = await ctx.db.get(args.shopContractId);
     if (!contract || contract.status !== "active") return null;
 
     // Idempotenz auf der Zahlungs-Referenz: Stripe liefert Webhook-Events
     // garantiert mindestens einmal (oft doppelt). Ohne diesen Check würde eine
-    // zweite Zustellung derselben Zahlung eine zweite Provision erzeugen, weil
-    // paymentCount bereits erhöht wurde und der (contract,paymentNumber)-Check
-    // dann nicht mehr greift.
+    // zweite Zustellung derselben Zahlung eine zweite Provision erzeugen.
     const alreadyProcessed = await ctx.db
       .query("commissions")
       .withIndex("by_paymentRef", q => q.eq("paymentRef", args.paymentRef))
       .first();
     if (alreadyProcessed) return null;
+
+    const tier      = contractTier(contract);
+    const listPrice = planPrice(contract.planType, tier);
+    const paidAmount = Math.round((args.paidAmount ?? listPrice) * 100) / 100;
+    // Free-Rechnungen (0 €) sind keine Zahlung: keine Provision, kein Zähler.
+    if (paidAmount <= 0) return null;
 
     const newCount = contract.paymentCount + 1;
 
@@ -169,37 +243,13 @@ export async function recordPaymentCore(
 
     const rule = resolveCommissionRule(contract.planType, newCount); // liefert phase + rate
 
-    // Tatsächlich eingenommener Betrag DIESER Zahlung:
-    // Abo + Bonusprogramm (keine Einrichtungsgebühr).
-    // Rabattcode: Prozent-Rabatt auf Abo + Bonus. Laufzeit: Jahresabo nur Zahlung #1, Monatsabo Zahlungen #1-12
-    // (das erste Jahr, z.B. 10 € statt 20 € pro Monat). Danach Normalpreis.
-    const rewardCount = contract.rewardCount ?? 0;
-    const isFirst     = newCount === 1;
-    const promoRate   = contract.firstYearDiscount ?? 0;
-    const inPromo     = !!promoRate && discountAppliesTo(contract.planType, newCount);
-    const listTotal   = recurringPrice(contract.planType, rewardCount);
-    const paidAmount  = inPromo ? discountedInvoice(contract.planType, rewardCount, promoRate) : listTotal;
+    // Direktvertrieb (Admin-Shop ohne Partner): immer Rate 0 — die
+    // Commission-Row dient nur der Umsatz-Erfassung.
+    const rate = contract.isDirect ? 0 : rule.rate;
 
-    // Provisions-Basis ist NUR der Abo-Anteil (ohne Bonusprogramm).
-    const aboList = planPrice(contract.planType);
-    const aboPaid = inPromo ? applyDiscount(aboList, promoRate) : aboList;
-
-    // Provisions-Rate: normal aus commissionEngine. Ein Rabattcode kann die Rate
-    // der ERSTEN Zahlung einmalig überschreiben (z.B. LOYAL50 = 50%). Ab Zahlung #2
-    // gilt wieder die normale Regel. Direktvertrieb (Admin-Shop ohne Partner):
-    // immer Rate 0 — die Commission-Row dient nur der Umsatz-Erfassung.
-    let rate = rule.rate;
-    if (contract.isDirect) {
-      rate = 0;
-    } else if (isFirst && contract.discountCode) {
-      const override = lookupDiscount(contract.discountCode)?.firstPaymentCommissionRate;
-      if (override !== undefined) rate = override;
-    }
-
-    // Provisions-Basis per Flag: "paid" (Default) = gezahlter Abo-Anteil,
-    // "full" = Abo-Listenpreis. Das Bonusprogramm ist provisionsfrei.
-    // Immer aus echten Server-Werten, nie aus Client-Input.
-    const base = commissionBase() === "full" ? aboList : aboPaid;
+    // Provisions-Basis per Flag: "paid" (Default) = gezahlter Betrag,
+    // "full" = Listenpreis der Stufe. Immer aus Server-Werten, nie aus Client-Input.
+    const base = commissionBase() === "full" ? listPrice : paidAmount;
     let amount = Math.round(base * rate * 100) / 100;
 
     // Sicherung: Provision darf nie höher sein als der tatsächlich eingenommene Betrag
@@ -228,15 +278,12 @@ export async function recordPaymentCore(
 
     await ctx.db.patch(args.shopContractId, { paymentCount: newCount });
 
-    const discountNote = inPromo
-      ? ` · Rabatt ${Math.round(promoRate * 100)}% (gezahlt €${paidAmount})`
-      : "";
     await ctx.db.insert("auditLog", {
       entityType: "commission",
       entityId:   commissionId,
       action:     "auto_payment",
       actorType:  "system",
-      note:       `${args.method} · Ref: ${args.paymentRef} · #${newCount} · Provision €${amount} (${commissionBase()})${discountNote}`,
+      note:       `${args.method} · Ref: ${args.paymentRef} · #${newCount} · ${tierInfo(tier).name} · gezahlt €${paidAmount} · Provision €${amount} (${commissionBase()})`,
     });
 
     if (capped) {
@@ -250,44 +297,30 @@ export async function recordPaymentCore(
       });
     }
 
-    // Zahlungsbestätigung an den Inhaber: echte Abrechnung dieser Zahlung
-    // (bei Rabattcode mit durchgestrichenen Normalpreisen + Erstjahr-Hinweis).
+    // Zahlungsbestätigung an den Inhaber
     const lead = await ctx.db.get(contract.shopLeadId);
     if (lead?.ownerEmail) {
-      const d           = inPromo ? promoRate : 0;
-      const rewardsList = rewardPrice(contract.planType) * rewardCount;
       await ctx.scheduler.runAfter(0, internal.emails.sendPaymentConfirmationEmail, {
-        ownerEmail:    lead.ownerEmail,
-        ownerName:     lead.ownerName || "Inhaber",
-        shopName:      lead.shopName || "Dein Shop",
-        planType:      contract.planType,
-        rewardCount,
-        paymentNumber: newCount,
-        aboList,
-        aboPaid:       Math.round(aboPaid * 100) / 100,
-        rewardsList,
-        rewardsPaid:   Math.round((d ? applyDiscount(rewardsList, d) : rewardsList) * 100) / 100,
-        totalPaid:     Math.round(paidAmount * 100) / 100,
-        discountCode:      d ? (contract.discountCode ?? "Rabatt") : undefined,
-        firstYearDiscount: d || undefined,
+        ownerEmail: lead.ownerEmail,
+        ownerName:  lead.ownerName || "Inhaber",
+        shopName:   lead.shopName || "Dein Shop",
+        planType:   contract.planType,
+        tier,
+        totalPaid:  paidAmount,
       });
     }
 
-    // Telegram an den Admin: bei Direktvertrieb und bei Verlängerungen hier;
-    // die erste Partner-Zahlung meldet stattdessen provisionShop ("Shop ist live").
-    if (contract.isDirect || newCount > 1) {
-      await ctx.scheduler.runAfter(0, internal.notifications.notifyPaymentReceived, {
-        shopName:         lead?.shopName ?? "—",
-        ownerName:        lead?.ownerName ?? "—",
-        amount:           Math.round(paidAmount * 100) / 100,
-        paymentNumber:    newCount,
-        planType:         contract.planType,
-        isDirect:         contract.isDirect === true,
-        commissionAmount: amount,
-        commissionRate:   rate,
-        wasPayLater:      newCount === 1 && !!contract.payLaterAt,
-      });
-    }
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyPaymentReceived, {
+      shopName:         lead?.shopName ?? "—",
+      ownerName:        lead?.ownerName ?? "—",
+      amount:           paidAmount,
+      paymentNumber:    newCount,
+      planType:         contract.planType,
+      isDirect:         contract.isDirect === true,
+      commissionAmount: amount,
+      commissionRate:   rate,
+      wasPayLater:      newCount === 1 && !!contract.payLaterAt,
+    });
 
     return { paymentNumber: newCount, amount, rate, phase: rule.phase, paidAmount };
 }
@@ -297,6 +330,7 @@ export const autoRecordPayment = internalMutation({
     shopContractId: v.id("shopContracts"),
     paymentRef:     v.string(),
     method:         v.string(),
+    paidAmount:     v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<RecordPaymentResult> => recordPaymentCore(ctx, args),
 });
@@ -308,17 +342,13 @@ export const cancelContractByStripe = internalMutation({
   },
 });
 
-export const patchContractStripeIds = internalMutation({
-  args: {
-    shopContractId:       v.id("shopContracts"),
-    stripeSubscriptionId: v.string(),
-    stripeCustomerId:     v.string(),
-  },
+export const contractAcceptsSubscription = internalQuery({
+  args: { shopContractId: v.string(), stripeSubscriptionId: v.string() },
   handler: async (ctx, args) => {
-    await ctx.db.patch(args.shopContractId, {
-      stripeSubscriptionId: args.stripeSubscriptionId,
-      stripeCustomerId:     args.stripeCustomerId,
-    });
+    const id = ctx.db.normalizeId("shopContracts", args.shopContractId);
+    const contract = id ? await ctx.db.get(id) : null;
+    if (!contract || contract.status !== "active") return false;
+    return !contract.stripeSubscriptionId || contract.stripeSubscriptionId === args.stripeSubscriptionId;
   },
 });
 
@@ -350,7 +380,7 @@ export const getLeadForContract = internalQuery({
       businessType:     lead.businessType,
       loatycardShopId:  lead.loatycardShopId,
       planType:         contract.planType,
-      rewardCount:      contract.rewardCount ?? 0,
+      tier:             contractTier(contract),
       isDirect:         contract.isDirect === true,
       affiliateName:    affiliate?.name ?? null,
       affiliateCode:    affiliate?.referralCode ?? null,
@@ -384,14 +414,20 @@ export const provisionShop = internalAction({
 
     const siteUrl = process.env.STEMPELKARTEN_CONVEX_SITE_URL ?? "";
     const secret  = process.env.BRIDGE_SECRET ?? "";
-    if (!siteUrl || !secret) return;
+    // Schlägt die Anlage fehl, ist der Vertrag trotzdem freigeschaltet →
+    // Admin sofort informieren, damit der Shop von Hand angelegt wird.
+    const fail = (why: string) => sendTelegram(
+      `❗ <b>Shop-Anlage fehlgeschlagen</b>\n\n<b>Shop:</b> ${escapeHtml(lead.shopName)}\n` +
+      `<b>Grund:</b> ${escapeHtml(why)}\n\nVertrag ist freigeschaltet, bitte Shop manuell anlegen.`
+    );
+    if (!siteUrl || !secret) { await fail("Brücke nicht konfiguriert"); return; }
 
     const res = await fetch(`${siteUrl}/provision-shop`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ secret, shopName: lead.shopName, affiliateLeadId: lead.leadId }),
-    });
-    if (!res.ok) return;
+    }).catch(() => null);
+    if (!res || !res.ok) { await fail(res ? `HTTP ${res.status}` : "nicht erreichbar"); return; }
 
     const { shopId, slug, adminLoginToken } = await res.json();
     await ctx.runMutation(internal.payments.patchLeadAfterProvision, {
@@ -401,8 +437,8 @@ export const provisionShop = internalAction({
       loatycardAdminToken: adminLoginToken,
     });
 
-    const planLabel  = lead.planType === "annual" ? `Jahresabo (€${planPrice("annual")})` : `Monatsabo (€${planPrice("monthly")})`;
-    const bonusLabel = lead.rewardCount > 0 ? `\n<b>Bonusprogramm:</b> ${lead.rewardCount} Belohnung(en)` : "";
+    const t = tierInfo(lead.tier);
+    const planLabel  = `${t.name} (€${t.monthly}/Monat, ${tierRangeLabel(lead.tier)})`;
     const phoneLine  = lead.ownerPhone  ? `\n📞 <b>Telefon:</b> ${escapeHtml(lead.ownerPhone)}`   : "";
     const cityLine   = lead.city        ? `\n📍 <b>Stadt:</b> ${escapeHtml(lead.city)}`            : "";
     const branchLine = lead.businessType ? `\n🏷 <b>Branche:</b> ${escapeHtml(lead.businessType)}` : "";
@@ -416,7 +452,7 @@ export const provisionShop = internalAction({
       `<b>Shop:</b> ${escapeHtml(lead.shopName)}\n` +
       `<b>Slug:</b> ${escapeHtml(slug)}\n` +
       `<b>Shop-ID:</b> <code>${shopId}</code>\n\n` +
-      `<b>Modell:</b> ${planLabel}${bonusLabel}\n\n` +
+      `<b>Tarif:</b> ${planLabel}\n\n` +
       `👤 <b>Inhaber:</b> ${escapeHtml(lead.ownerName)}\n` +
       `✉️ <b>E-Mail:</b> ${escapeHtml(lead.ownerEmail)}` +
       phoneLine + cityLine + branchLine + partnerLine +
@@ -425,185 +461,176 @@ export const provisionShop = internalAction({
   },
 });
 
-// ── Rabattcode (Testmodus) ────────────────────────────────────────────────────
+// ── Stufenwechsel → Stripe-Abo anpassen ───────────────────────────────────────
+// Wird von admin.syncCardCountForShop angestoßen, wenn ein Shop über (oder
+// unter) eine Kartengrenze rutscht. Neuer Preis gilt ab der NÄCHSTEN Rechnung
+// (proration_behavior "none" = keine anteilige Verrechnung im laufenden Monat).
 
-export const getContractForDiscount = internalQuery({
-  args: { paymentToken: v.string() },
+export const getContractForStripeUpdate = internalQuery({
+  args: { shopContractId: v.id("shopContracts") },
   handler: async (ctx, args) => {
-    const contract = await ctx.db
-      .query("shopContracts")
-      .withIndex("by_paymentToken", q => q.eq("paymentToken", args.paymentToken))
-      .unique();
+    const contract = await ctx.db.get(args.shopContractId);
     if (!contract) return null;
-    const affiliate = await ctx.db.get(contract.affiliateId);
     return {
-      contractId:                contract._id,
-      planType:                  contract.planType,
-      rewardCount:               contract.rewardCount ?? 0,
-      paymentCount:              contract.paymentCount,
-      affiliateDiscountEligible: affiliate?.discountEligible === true,
+      status:               contract.status,
+      planType:             contract.planType,
+      tier:                 contractTier(contract),
+      stripeSubscriptionId: contract.stripeSubscriptionId ?? null,
     };
   },
 });
 
-export const storeDiscount = internalMutation({
-  args: {
-    shopContractId:    v.id("shopContracts"),
-    code:              v.string(),
-    firstYearDiscount: v.number(),
-    normalPrice:       v.number(),
-    discountedPrice:   v.number(),
-  },
-  handler: async (ctx, args) => {
-    await ctx.db.patch(args.shopContractId, {
-      discountCode:      args.code,
-      firstYearDiscount: args.firstYearDiscount,
-      normalPrice:       args.normalPrice,
-      discountedPrice:   args.discountedPrice,
+export const updateStripeTier = internalAction({
+  args: { shopContractId: v.id("shopContracts") },
+  handler: async (ctx, args): Promise<void> => {
+    const c = await ctx.runQuery(internal.payments.getContractForStripeUpdate, args);
+    if (!c || c.status !== "active" || !c.stripeSubscriptionId || !STRIPE_SECRET) return;
+
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(STRIPE_SECRET, { apiVersion: STRIPE_API_VERSION });
+
+    const sub  = await stripe.subscriptions.retrieve(c.stripeSubscriptionId);
+    if (sub.status === "canceled" || sub.status === "incomplete_expired") return;
+    const [item, ...extra] = sub.items.data;
+    if (!item) return;
+    const unitAmount = Math.round(planPrice(c.planType, c.tier) * 100);
+    // Schon richtig (und keine Altlast-Positionen wie früherer Bonus-Aufpreis) → nichts tun
+    if (item.price.unit_amount === unitAmount && extra.length === 0) return;
+
+    // Wechsel von 0 € auf einen Preis: Stripe würde sonst sofort abrechnen und
+    // den Abrechnungstag verschieben. Mit einer Gratisphase bis zum Ende der
+    // laufenden Periode gilt der neue Preis erst ab der nächsten Abrechnung.
+    const fromFree = (item.price.unit_amount ?? 0) === 0 && unitAmount > 0;
+    const periodEnd = item.current_period_end;
+    const deferToPeriodEnd = fromFree && periodEnd > Math.floor(Date.now() / 1000) + 60;
+
+    const product = typeof item.price.product === "string" ? item.price.product : item.price.product.id;
+    await stripe.subscriptions.update(c.stripeSubscriptionId, {
+      items: [
+        {
+          id: item.id,
+          price_data: {
+            currency:    "eur",
+            product,
+            unit_amount: unitAmount,
+            recurring:   { interval: c.planType === "annual" ? "year" : "month" },
+          },
+        },
+        // Weitere Positionen (z. B. alter Bonus-Aufpreis) entfernen
+        ...extra.map(x => ({ id: x.id, deleted: true as const })),
+      ],
+      proration_behavior: "none",
+      ...(deferToPeriodEnd ? { trial_end: periodEnd } : {}),
+      metadata: { tier: c.tier },
     });
-  },
-});
-
-// Serverseitige Rabatt-Validierung. Client schickt NUR den String; ob & wieviel
-// Rabatt gilt, entscheidet ausschließlich der Server (Code + Partner-Eligibility).
-export const applyDiscountCode = action({
-  args: { paymentToken: v.string(), code: v.string() },
-  handler: async (ctx, args): Promise<{
-    valid: boolean; reason?: string;
-    firstYearDiscount?: number; normalPrice?: number; discountedPrice?: number; label?: string;
-  }> => {
-    const info = await ctx.runQuery(internal.payments.getContractForDiscount, { paymentToken: args.paymentToken });
-    if (!info)                 return { valid: false, reason: "Ungültiger Zahlungslink" };
-    if (info.paymentCount > 0) return { valid: false, reason: "Bereits bezahlt" };
-
-    const discount = lookupDiscount(args.code);
-    if (!discount)                       return { valid: false, reason: "Code ungültig" };
-    if (!discount.plans.includes(info.planType)) {
-      return { valid: false, reason: `Dieser Code gilt nur für das ${discount.plans.includes("annual") ? "Jahresabo" : "Monatsabo"}` };
-    }
-    if (!info.affiliateDiscountEligible) return { valid: false, reason: "Für diesen Vertrag nicht verfügbar" };
-
-    // Rabatt: Prozent auf Abo + Bonusprogramm.
-    const normalPrice     = recurringPrice(info.planType, info.rewardCount);
-    const discountedPrice = discountedInvoice(info.planType, info.rewardCount, discount.firstYearDiscount);
-
-    await ctx.runMutation(internal.payments.storeDiscount, {
-      shopContractId:    info.contractId,
-      code:              args.code.trim().toUpperCase(),
-      firstYearDiscount: discount.firstYearDiscount,
-      normalPrice,
-      discountedPrice,
-    });
-
-    return {
-      valid: true,
-      firstYearDiscount: discount.firstYearDiscount,
-      normalPrice,
-      discountedPrice,
-      label: discount.label,
-    };
   },
 });
 
 // ── Stripe: Checkout-Session erstellen ────────────────────────────────────────
-// STRIPE_SUBSCRIPTION_MODE=true  → Abo (automatische Verlängerung)
-// (nicht gesetzt)                → Einmalzahlung (aktueller Pilot-Modus)
+// Immer Abo (monatlich), Zahlart SEPA-Lastschrift oder Karte. Neue Shops
+// starten in Free (0 €): Stripe sammelt dann nur IBAN/Karte + SEPA-Mandat ein,
+// abgebucht wird erst ab einer bezahlten Stufe.
 
 export const createStripeCheckout = action({
   args: { paymentToken: v.string() },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ url: string | null }> => {
+    if (!STRIPE_SECRET) throw new ConvexError("Online-Zahlung ist noch nicht eingerichtet");
     const Stripe = (await import("stripe")).default;
-    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2026-06-24.dahlia" });
+    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: STRIPE_API_VERSION });
 
     const info = await ctx.runQuery(api.payments.getByPaymentToken, { token: args.paymentToken });
     if (!info) throw new ConvexError("Ungültiger Zahlungslink");
+    if (info.activated) throw new ConvexError("Bezahldaten sind bereits hinterlegt");
 
-    const subscriptionMode = process.env.STRIPE_SUBSCRIPTION_MODE === "true";
-    const planLabel = info.planType === "annual" ? "Jahresabo" : "Monatsabo";
-    const interval  = info.planType === "annual" ? ("year" as const) : ("month" as const);
-
-    type CheckoutParams = NonNullable<Parameters<typeof stripe.checkout.sessions.create>[0]>;
-    let sessionParams: CheckoutParams;
-
-    if (subscriptionMode) {
-      // Wiederkehrende Positionen: Abo + Bonusprogramm (keine Einrichtungsgebühr).
-      const lineItems: NonNullable<CheckoutParams["line_items"]> = [{
-        price_data: {
-          currency: "eur",
-          product_data: { name: `LoyaltyCard ${planLabel}`, description: info.shopName },
-          unit_amount: Math.round(info.aboPrice * 100),
-          recurring: { interval },
-        },
-        quantity: 1,
-      }];
-      if (info.rewardCount > 0) {
-        lineItems.push({
-          price_data: {
-            currency: "eur",
-            product_data: { name: `Bonusprogramm (${info.rewardCount} Belohnung${info.rewardCount === 1 ? "" : "en"})` },
-            unit_amount: Math.round(info.rewardUnitPrice * 100),
-            recurring: { interval },
-          },
-          quantity: info.rewardCount,
-        });
+    // Noch offene Sitzung desselben Vertrags (gleicher Preis) wiederverwenden,
+    // statt eine zweite anzulegen → kein Doppel-Abo durch mehrere Tabs/Klicks.
+    const previous: string | null = await ctx.runQuery(internal.payments.getCheckoutSessionId, { shopContractId: info.contractId });
+    if (previous) {
+      const old = await stripe.checkout.sessions.retrieve(previous).catch(() => null);
+      if (old && old.status === "open" && old.url && old.amount_total === Math.round(info.amount * 100)) {
+        return { url: old.url };
       }
-      // Rabatt (nur erste Rechnung) als FESTER Betrag mit duration:"once" — ab der
-      // Verlängerung gilt automatisch der Normalpreis. Fester Betrag, damit Stripe
-      // exakt den serverseitig berechneten info.payableAmount abbucht.
-      let discounts: { coupon: string }[] | undefined;
-      if (info.firstYearDiscount && info.paymentCount === 0) {
-        const coupon = await stripe.coupons.create({
-          amount_off: Math.round((info.normalPrice - info.payableAmount) * 100),
-          currency:   "eur",
-          duration:   "once",
-          name:       info.discountCode ?? "Rabatt 1. Jahr",
-        });
-        discounts = [{ coupon: coupon.id }];
-      }
-
-      sessionParams = {
-        mode: "subscription",
-        payment_method_types: ["card", "sepa_debit"],
-        line_items: lineItems,
-        ...(discounts ? { discounts } : {}),
-        success_url: `${APP_URL}/pay/success?method=stripe`,
-        cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
-        metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
-      };
-    } else {
-      // Einmalzahlung (Pilot-Modus): tatsächlich zu zahlender Betrag inkl.
-      // Bonusprogramm, Rabatt bereits abgezogen.
-      const parts = [`LoyaltyCard ${planLabel}`];
-      if (info.rewardCount > 0) parts.push(`Bonusprogramm (${info.rewardCount})`);
-      sessionParams = {
-        mode: "payment",
-        payment_method_types: ["card", "sepa_debit"],
-        line_items: [{
-          price_data: {
-            currency: "eur",
-            product_data: { name: parts.join(" + "), description: info.shopName },
-            unit_amount: Math.round(info.payableAmount * 100),
-          },
-          quantity: 1,
-        }],
-        success_url: `${APP_URL}/pay/success?method=stripe`,
-        cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
-        metadata: { paymentToken: args.paymentToken, contractId: info.contractId },
-      };
+      if (old && old.status === "complete") throw new ConvexError("Bezahldaten sind bereits hinterlegt");
+      if (old && old.status === "open") await stripe.checkout.sessions.expire(previous).catch(() => {});
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
+    const lead = await ctx.runQuery(internal.payments.getLeadForContract, { shopContractId: info.contractId });
+
+    // Stabiler Idempotenzschlüssel: parallele Aufrufe mit gleichem Stand
+    // bekommen von Stripe dieselbe Sitzung zurück statt zwei neue.
+    const idempotencyKey = `checkout-${info.contractId}-${previous ?? "first"}-${Math.round(info.amount * 100)}`;
+    const session = await stripe.checkout.sessions.create({
+      mode: "subscription",
+      payment_method_types: ["card", "sepa_debit"],
+      locale: "de",
+      ...(lead?.ownerEmail ? { customer_email: lead.ownerEmail } : {}),
+      line_items: [{
+        price_data: {
+          currency: "eur",
+          product_data: { name: "LoyaltyCard Abo", description: info.shopName },
+          unit_amount: Math.round(info.amount * 100),
+          recurring: { interval: info.planType === "annual" ? "year" : "month" },
+        },
+        quantity: 1,
+      }],
+      subscription_data: { metadata: { contractId: info.contractId, tier: info.tier } },
+      success_url: `${APP_URL}/pay/success?method=stripe`,
+      cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
+      metadata: { contractId: info.contractId },
+    }, { idempotencyKey });
+    if (session.status !== "open") throw new ConvexError("Bitte Seite neu laden und erneut versuchen");
+    await ctx.runMutation(internal.payments.setCheckoutSessionId, {
+      shopContractId: info.contractId,
+      sessionId:      session.id,
+    });
     return { url: session.url };
   },
 });
 
+export const getCheckoutSessionId = internalQuery({
+  args: { shopContractId: v.id("shopContracts") },
+  handler: async (ctx, args) => (await ctx.db.get(args.shopContractId))?.stripeCheckoutSessionId ?? null,
+});
+
+export const setCheckoutSessionId = internalMutation({
+  args: { shopContractId: v.id("shopContracts"), sessionId: v.string() },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.shopContractId, { stripeCheckoutSessionId: args.sessionId });
+  },
+});
+
 // ── Stripe: Webhook (in http.ts eingebunden) ──────────────────────────────────
+// Benötigte Events im Stripe-Dashboard: checkout.session.completed,
+// invoice.paid, invoice.payment_failed, customer.subscription.deleted.
+
+// Vertrag zu einer Rechnung: über die gespeicherte Abo-ID, sonst über die
+// Vertragsnummer in den Abo-Metadaten (beim Checkout gesetzt).
+async function resolveContractId(ctx: any, invoice: any, subscriptionId: string): Promise<Id<"shopContracts"> | null> {
+  const contract = await ctx.runQuery(internal.payments.getContractBySubscriptionId, { stripeSubscriptionId: subscriptionId });
+  if (contract) return contract._id;
+  const fromMeta = invoice?.parent?.subscription_details?.metadata?.contractId;
+  if (!fromMeta) return null;
+  // Nur zuordnen, wenn der Vertrag noch kein (anderes) Abo hat, sonst könnte
+  // ein Doppel-Abo eine Provision auslösen.
+  const ok = await ctx.runQuery(internal.payments.contractAcceptsSubscription, {
+    shopContractId: fromMeta, stripeSubscriptionId: subscriptionId,
+  });
+  return ok ? fromMeta : null;
+}
+
+// Ab API-Version 2025-03 steht die Abo-ID unter parent.subscription_details.
+function invoiceSubscriptionId(invoice: any): string | undefined {
+  const fromParent = invoice?.parent?.subscription_details?.subscription;
+  const id = fromParent ?? invoice?.subscription;
+  if (!id) return undefined;
+  return typeof id === "string" ? id : id.id;
+}
 
 export const handleStripeWebhook = action({
   args: { payload: v.string(), signature: v.string() },
   handler: async (ctx, args) => {
     const Stripe = (await import("stripe")).default;
-    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: "2026-06-24.dahlia" });
+    const stripe  = new Stripe(STRIPE_SECRET, { apiVersion: STRIPE_API_VERSION });
 
     let event;
     try {
@@ -612,58 +639,77 @@ export const handleStripeWebhook = action({
       throw new ConvexError("Webhook-Signatur ungültig");
     }
 
-    // Einmalzahlung: Zahlung direkt beim Checkout erfassen
+    // Checkout fertig = Bezahldaten + SEPA-Mandat hinterlegt → Shop freischalten.
+    // Geld wird hier NICHT gebucht (bei Lastschrift kommt es erst Tage später);
+    // das passiert ausschließlich über invoice.paid.
     if (event.type === "checkout.session.completed") {
       const session    = event.data.object as any;
       const contractId = session.metadata?.contractId;
-
-      // Subscription-Modus: nur Subscription-ID speichern, Zahlung kommt via invoice-Event
-      if (session.mode === "subscription" && contractId && session.subscription) {
-        await ctx.runMutation(internal.payments.patchContractStripeIds, {
-          shopContractId:       contractId,
-          stripeSubscriptionId: session.subscription as string,
-          stripeCustomerId:     session.customer as string,
-        });
-        return; // Zahlung wird durch invoice.payment_succeeded erfasst
+      if (session.mode !== "subscription" || !contractId || !session.subscription || session.status !== "complete") return;
+      const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription.id;
+      const result = await ctx.runMutation(internal.payments.activateContract, {
+        shopContractId:       contractId,
+        method:               "stripe-checkout",
+        stripeSubscriptionId: subscriptionId,
+        stripeCustomerId:     typeof session.customer === "string" ? session.customer : session.customer?.id,
+      });
+      if (result.duplicateSubscription || result.orphanSubscription) {
+        // Kein catch: schlägt die Kündigung fehl, antwortet der Webhook mit
+        // Fehler und Stripe stellt das Ereignis erneut zu (Aktivierung ist idempotent).
+        await stripe.subscriptions.cancel(subscriptionId);
+        await sendTelegram(
+          `⚠️ <b>Stripe-Abo automatisch gekündigt</b>\n\nAbo <code>${escapeHtml(subscriptionId)}</code> ` +
+          (result.duplicateSubscription
+            ? "war ein zweites Abo für denselben Vertrag."
+            : "gehört zu einem gelöschten oder gekündigten Vertrag.") +
+          ` Bitte im Stripe-Dashboard prüfen, ob schon etwas abgebucht wurde.`
+        );
       }
-
-      // Einmalzahlung
-      const paymentRef = session.payment_intent ?? session.id;
-      if (contractId) {
-        const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
-          shopContractId: contractId,
-          paymentRef,
-          method: "stripe",
-        });
-        if (result?.paymentNumber === 1) {
-          await ctx.runAction(internal.payments.provisionShop, { shopContractId: contractId });
-        }
-      }
+      return;
     }
 
-    // Subscription: jede Zahlung (erste + alle Verlängerungen) automatisch erfassen
-    if (event.type === "invoice.payment_succeeded") {
+    // Rechnung wirklich bezahlt (bei SEPA erst nach Geldeingang) → Zahlung +
+    // Provision erfassen. 0-€-Rechnungen (Free) ignoriert recordPaymentCore.
+    if (event.type === "invoice.paid") {
       const invoice        = event.data.object as any;
-      const subscriptionId = invoice.subscription as string | undefined;
+      const subscriptionId = invoiceSubscriptionId(invoice);
       if (!subscriptionId) return;
 
+      // Stripe garantiert keine Reihenfolge: kommt invoice.paid vor
+      // checkout.session.completed, ist die Abo-ID noch nicht gespeichert.
+      // Dann über die Vertragsnummer in den Abo-Metadaten zuordnen.
+      const contractId = await resolveContractId(ctx, invoice, subscriptionId);
+      if (!contractId) return; // kein LoyaltyCard-Vertrag (z. B. anderes Produkt im selben Stripe-Konto)
+
+      await ctx.runMutation(internal.payments.autoRecordPayment, {
+        shopContractId: contractId,
+        paymentRef:     invoice.id as string,
+        method:         "stripe",
+        paidAmount:     Number(invoice.amount_paid ?? 0) / 100,
+      });
+      return;
+    }
+
+    // Abbuchung fehlgeschlagen (z. B. Lastschrift zurückgegeben, Karte abgelehnt).
+    // Stripe versucht es automatisch erneut; der Admin wird informiert.
+    if (event.type === "invoice.payment_failed") {
+      const invoice        = event.data.object as any;
+      const subscriptionId = invoiceSubscriptionId(invoice);
+      if (!subscriptionId) return;
       const contract = await ctx.runQuery(internal.payments.getContractBySubscriptionId, {
         stripeSubscriptionId: subscriptionId,
       });
       if (!contract) return;
-
-      const paymentRef = (invoice.payment_intent as string | null) ?? invoice.id;
-      const result = await ctx.runMutation(internal.payments.autoRecordPayment, {
+      await ctx.runMutation(internal.payments.logPaymentFailed, {
         shopContractId: contract._id,
-        paymentRef,
-        method: "stripe-subscription",
+        invoiceId:      invoice.id as string,
+        amount:         Number(invoice.amount_due ?? 0) / 100,
+        attempt:        Number(invoice.attempt_count ?? 1),
       });
-      if (result?.paymentNumber === 1) {
-        await ctx.runAction(internal.payments.provisionShop, { shopContractId: contract._id });
-      }
+      return;
     }
 
-    // Subscription gekündigt
+    // Abo beendet (gekündigt oder nach allen Fehlversuchen)
     if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object as any;
       const contract = await ctx.runQuery(internal.payments.getContractBySubscriptionId, {
@@ -676,3 +722,29 @@ export const handleStripeWebhook = action({
   },
 });
 
+export const logPaymentFailed = internalMutation({
+  args: {
+    shopContractId: v.id("shopContracts"),
+    invoiceId:      v.string(),
+    amount:         v.number(),
+    attempt:        v.number(),
+  },
+  handler: async (ctx, args) => {
+    const contract = await ctx.db.get(args.shopContractId);
+    if (!contract) return;
+    const lead = await ctx.db.get(contract.shopLeadId);
+    await ctx.db.insert("auditLog", {
+      entityType: "shopContract",
+      entityId:   contract._id,
+      action:     "payment_failed",
+      actorType:  "system",
+      note:       `Stripe-Abbuchung fehlgeschlagen · Rechnung ${args.invoiceId} · €${args.amount} · Versuch ${args.attempt}`,
+    });
+    await ctx.scheduler.runAfter(0, internal.notifications.notifyPaymentFailed, {
+      shopName:  lead?.shopName ?? "—",
+      ownerName: lead?.ownerName ?? "—",
+      amount:    args.amount,
+      attempt:   args.attempt,
+    });
+  },
+});
