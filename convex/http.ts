@@ -2,6 +2,7 @@ import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { isValidBridgeSecret } from "./adminAuth";
+import { isValidEmail } from "./validation";
 
 const http = httpRouter();
 
@@ -54,6 +55,44 @@ http.route({
     return new Response(JSON.stringify(result), {
       headers: { "Content-Type": "application/json" },
     });
+  }),
+});
+
+// Willkommens-Mail für Shops ohne Abrechnung (Stempelkarten-App kann selbst
+// keine Mails senden). Nur mit Brücken-Schlüssel; Links nur auf unsere Domain.
+http.route({
+  path:    "/send-shop-welcome",
+  method:  "POST",
+  handler: httpAction(async (ctx, req) => {
+    const body = await req.json().catch(() => null);
+    const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+    if (!body || !isValidBridgeSecret(body.secret)) return json({ error: "Unauthorized" }, 401);
+
+    const str = (x: unknown, max: number) => (typeof x === "string" ? x.trim().slice(0, max) : "");
+    const ownerEmail = str(body.ownerEmail, 200);
+    const ownerName  = str(body.ownerName, 100) || "Inhaber";
+    const shopName   = str(body.shopName, 100);
+    const loginUrl   = str(body.loginUrl, 500);
+    const joinUrl    = str(body.joinUrl, 500);
+    // Nur unsere App-Domain und genau die erwarteten Pfade (kein Einschleusen fremder Links)
+    const allowed = (u: string, path: RegExp) => {
+      try {
+        const url = new URL(u);
+        const hostOk = (url.protocol === "https:" && url.hostname === "app.loyaltycard.info")
+          || (url.protocol === "http:" && url.hostname === "localhost");
+        return hostOk && path.test(url.pathname) && !url.search && !url.hash;
+      } catch { return false; }
+    };
+    if (!isValidEmail(ownerEmail) || !shopName
+      || !allowed(loginUrl, /^\/betrieb\/login\/[A-Za-z0-9-]{10,80}$/)
+      || !allowed(joinUrl, /^\/join\/[a-z0-9-]{1,80}$/)) return json({ error: "Bad request" }, 400);
+
+    try {
+      await ctx.runAction(internal.emails.sendShopWelcomeEmail, { ownerEmail, ownerName, shopName, loginUrl, joinUrl });
+    } catch {
+      return json({ error: "Mail failed" }, 502);
+    }
+    return json({ sent: true });
   }),
 });
 

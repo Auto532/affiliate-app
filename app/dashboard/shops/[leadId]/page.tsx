@@ -10,7 +10,6 @@ import { nextCommission } from "@/app/lib/nextCommission";
 import TierTable from "@/app/lib/TierTable";
 import { tierInfo } from "@/convex/pricing";
 
-const APP_URL     = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL     ?? "http://localhost:3000";
 const STEMPEL_URL = process.env.NEXT_PUBLIC_STEMPELKARTEN_APP_URL ?? "https://loyaltycard.info";
 
 export default function ShopDetailPage() {
@@ -46,7 +45,7 @@ export default function ShopDetailPage() {
   );
 
   const contract   = (lead as any).contract;
-  const payLink    = contract?.paymentToken ? `${APP_URL}/pay/${contract.paymentToken}` : null;
+  const payLink    = contract?.paymentToken ? `${STEMPEL_URL}/bezahlen/${contract.paymentToken}` : null;
   const shopLink   = lead.loatycardShopSlug ? `${STEMPEL_URL}/join/${lead.loatycardShopSlug}` : null;
   const next       = contract ? nextCommission(contract.planType, contract.tier, contract.paymentCount) : null;
   const isPaid     = contract && contract.activated;

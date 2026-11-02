@@ -138,6 +138,9 @@ export default defineSchema({
     // Freigeschaltet (Bezahldaten hinterlegt bzw. vom Admin aktiviert). Ab dann
     // ist der Shop live; Zahlungen kommen danach monatlich über Stripe.
     activatedAt:   v.optional(v.number()),
+    // Inhaber hat schon eine Willkommens-Mail bekommen (Shop lief vorher ohne
+    // Abrechnung) → bei der Freischaltung keine zweite Begrüßung schicken
+    welcomeSent:   v.optional(v.boolean()),
 
     // Direktvertrieb: Vertrag wurde vom Admin ohne Partner angelegt.
     // Zahlungen erzeugen weiterhin Commission-Rows (für den Umsatz in den

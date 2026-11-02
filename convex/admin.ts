@@ -229,6 +229,8 @@ export const createDirectShopContract = mutation({
     planType:            v.optional(v.union(v.literal("annual"), v.literal("monthly"))),
     // Bestehender Shop kann schon Kunden haben → Startstufe danach
     cardCount:           v.optional(v.number()),
+    // Shop lief bisher ohne Abrechnung, Begrüßung ist schon raus
+    welcomeSent:         v.optional(v.boolean()),
     loatycardShopId:     v.string(),
     loatycardShopSlug:   v.string(),
     loatycardAdminToken: v.optional(v.string()),
@@ -240,6 +242,16 @@ export const createDirectShopContract = mutation({
     // mehrere Läden haben) — eindeutig sein müssen nur Endkunden pro Shop.
     if (args.ownerEmail && !isValidEmail(args.ownerEmail)) {
       throw new ConvexError("Inhaber E-Mail: bitte eine gültige E-Mail-Adresse angeben");
+    }
+
+    // Hat der Shop schon einen Vertrag (z. B. zweiter Klick / zweiter Tab)?
+    // Dann denselben Bezahllink zurückgeben statt einen weiteren anzulegen.
+    const existingLead = (await ctx.db.query("shopLeads").collect())
+      .find(l => l.loatycardShopId === args.loatycardShopId);
+    if (existingLead) {
+      const existing = await ctx.db.query("shopContracts")
+        .withIndex("by_shopLead", q => q.eq("shopLeadId", existingLead._id)).first();
+      if (existing?.paymentToken) return { paymentToken: existing.paymentToken };
     }
 
     const affiliate = await getOrCreateDirectAffiliate(ctx);
@@ -278,6 +290,7 @@ export const createDirectShopContract = mutation({
       isDirect:      true,
       cardCount,
       tier:          tierForCardCount(cardCount),
+      welcomeSent:   args.welcomeSent,
     });
 
     await ctx.db.insert("auditLog", {

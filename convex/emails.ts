@@ -141,14 +141,19 @@ const LEGAL_ITEMS = [
   "Datenschutzerklärung bzw. Datenschutz-Kontakt",
 ];
 
-async function sendOwnerMail(to: string, subject: string, html: string, text: string): Promise<void> {
-  if (!RESEND_KEY) return;
+// Gibt zurück, ob die Mail angenommen wurde (für Aufrufer, die das wissen müssen)
+async function sendOwnerMail(to: string, subject: string, html: string, text: string): Promise<boolean> {
+  if (!RESEND_KEY) { console.error("Resend nicht konfiguriert"); return false; }
   const res = await fetch("https://api.resend.com/emails", {
     method:  "POST",
     headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
     body:    JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html, text }),
-  });
-  if (!res.ok) console.error(`Resend-Fehler ${res.status}: ${await res.text()}`);
+  }).catch(() => null);
+  if (!res || !res.ok) {
+    console.error(`Resend-Fehler ${res ? res.status : "nicht erreichbar"}: ${res ? await res.text() : ""}`);
+    return false;
+  }
+  return true;
 }
 
 export const sendWelcomeEmail = internalAction({
@@ -208,6 +213,68 @@ export const sendWelcomeEmail = internalAction({
     ].join("\n");
 
     await sendOwnerMail(args.ownerEmail, `Willkommen bei LoyaltyCard, ${args.shopName} ist freigeschaltet`, html, text);
+  },
+});
+
+// Willkommen für Shops OHNE Abrechnung (vom Admin direkt angelegt): kein
+// Tarif, dafür der persönliche Login-Link und der Link für die Kunden.
+// Wird von der Stempelkarten-App über die Brücke /send-shop-welcome ausgelöst.
+export const sendShopWelcomeEmail = internalAction({
+  args: {
+    ownerEmail: v.string(),
+    ownerName:  v.string(),
+    shopName:   v.string(),
+    loginUrl:   v.string(),
+    joinUrl:    v.string(),
+  },
+  handler: async (_ctx, args) => {
+    const button = (href: string, label: string) => `
+    <tr>
+      <td style="padding:0 32px 24px 32px;">
+        <a href="${escapeHtml(href)}"
+          style="display:inline-block;background:linear-gradient(120deg,#e8c96a,#c9a227);color:#0d0c0a;padding:14px 28px;border-radius:12px;
+                 text-decoration:none;font-weight:700;font-size:15px;">${label} &rarr;</a>
+      </td>
+    </tr>`;
+    const html = ownerMailShell("WILLKOMMEN",
+      heading(`Herzlich willkommen, ${escapeHtml(args.ownerName)}!`) +
+      para(`Schön, dass du dabei bist! Die digitale Stempelkarte für <strong style="color:#f2ede4;">${escapeHtml(args.shopName)}</strong>
+         ist eingerichtet. Über deinen persönlichen Zugang scannst du Kunden, vergibst Stempel und siehst deine Statistiken.`) +
+      button(args.loginUrl, "Zu deinem Betriebs-Dashboard") +
+      para(`Wichtig: Dieser Link ist dein persönlicher Schlüssel. Bitte gib ihn nicht weiter. Für Mitarbeiter gibt es im
+         Dashboard einen eigenen Zugang.`) +
+      box("Link für deine Kunden", [["Zum Teilen oder als QR-Code", `<a href="${escapeHtml(args.joinUrl)}" style="color:#e8c96a;">Stempelkarte öffnen</a>`]]) +
+      checklist("Das alles ist für dich enthalten", INCLUDED) +
+      para(`Zu deinem Paket gehört ein <strong>individuelles Design</strong> deiner Stempelkarte. Wir melden uns
+         <strong>innerhalb der nächsten 24 Stunden</strong> persönlich bei dir.`) +
+      checklist("Bitte halte diese Angaben bereit", LEGAL_ITEMS.map(escapeHtml)) +
+      para(`Diese Angaben brauchen wir für das Impressum, damit deine Stempelkarte rechtlich sauber online gehen kann.`),
+    );
+    const text = [
+      `Herzlich willkommen, ${args.ownerName}!`,
+      ``,
+      `Die digitale Stempelkarte für "${args.shopName}" ist eingerichtet.`,
+      ``,
+      `Dein persönlicher Zugang zum Betriebs-Dashboard (bitte nicht weitergeben):`,
+      args.loginUrl,
+      ``,
+      `Link für deine Kunden:`,
+      args.joinUrl,
+      ``,
+      `Das alles ist enthalten:`,
+      ...INCLUDED.map(e => `- ${e}`),
+      ``,
+      `Wir melden uns innerhalb der nächsten 24 Stunden persönlich bei dir wegen des Designs.`,
+      ``,
+      `Bitte halte diese Angaben bereit (für das Impressum):`,
+      ...LEGAL_ITEMS.map(e => `- ${e}`),
+      ``,
+      `Fragen? WhatsApp oder Anruf: ${WHATSAPP_NR}`,
+      ``,
+      `Dein LoyaltyCard-Team`,
+    ].join("\n");
+    const ok = await sendOwnerMail(args.ownerEmail, `Willkommen bei LoyaltyCard, ${args.shopName} ist eingerichtet`, html, text);
+    if (!ok) throw new Error("Willkommens-Mail konnte nicht versendet werden");
   },
 });
 

@@ -15,7 +15,8 @@ function commissionBase(): "paid" | "full" {
 const STRIPE_SECRET  = process.env.STRIPE_SECRET_KEY  ?? "";
 const STRIPE_WEBHOOK = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 const STRIPE_API_VERSION = "2026-06-24.dahlia" as const;
-const APP_URL        = process.env.NEXT_PUBLIC_AFFILIATE_APP_URL ?? "http://localhost:3000";
+// Bezahlseite liegt in der Stempelkarten-App (app.loyaltycard.info/bezahlen/…)
+const PAY_PAGE_URL   = process.env.PAY_PAGE_URL ?? "https://app.loyaltycard.info";
 const TG_TOKEN       = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TG_CHAT_ID     = process.env.TELEGRAM_CHAT_ID   ?? "";
 
@@ -166,7 +167,7 @@ export async function activateContractCore(
 
   const lead = await ctx.db.get(contract.shopLeadId);
   const tier = contractTier(contract);
-  if (lead?.ownerEmail) {
+  if (lead?.ownerEmail && !contract.welcomeSent) {
     await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
       ownerEmail: lead.ownerEmail,
       ownerName:  lead.ownerName || "Inhaber",
@@ -574,8 +575,8 @@ export const createStripeCheckout = action({
         quantity: 1,
       }],
       subscription_data: { metadata: { contractId: info.contractId, tier: info.tier } },
-      success_url: `${APP_URL}/pay/success?method=stripe`,
-      cancel_url:  `${APP_URL}/pay/${args.paymentToken}`,
+      success_url: `${PAY_PAGE_URL}/bezahlen/erfolg`,
+      cancel_url:  `${PAY_PAGE_URL}/bezahlen/${args.paymentToken}`,
       metadata: { contractId: info.contractId },
     }, { idempotencyKey });
     if (session.status !== "open") throw new ConvexError("Bitte Seite neu laden und erneut versuchen");
