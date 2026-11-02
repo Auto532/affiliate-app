@@ -2,6 +2,7 @@ import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { TIERS, tierInfo, tierRangeLabel, type Tier } from "./pricing";
 import { escapeHtml } from "./htmlEscape";
+import { sendTelegram } from "./notifications";
 
 const RESEND_KEY  = process.env.RESEND_API_KEY ?? "";
 const FROM_EMAIL  = process.env.RESEND_FROM_EMAIL ?? "LoyaltyCard <onboarding@resend.dev>";
@@ -141,19 +142,30 @@ const LEGAL_ITEMS = [
   "Datenschutzerklärung bzw. Datenschutz-Kontakt",
 ];
 
-// Gibt zurück, ob die Mail angenommen wurde (für Aufrufer, die das wissen müssen)
+// Gibt zurück, ob die Mail angenommen wurde (für Aufrufer, die das wissen müssen).
+// Kurze Aussetzer werden mit zwei Wiederholungen abgefangen; scheitert alles,
+// geht eine Telegram-Meldung an den Admin, damit keine Mail unbemerkt fehlt.
 async function sendOwnerMail(to: string, subject: string, html: string, text: string): Promise<boolean> {
-  if (!RESEND_KEY) { console.error("Resend nicht konfiguriert"); return false; }
-  const res = await fetch("https://api.resend.com/emails", {
-    method:  "POST",
-    headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json" },
-    body:    JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html, text }),
-  }).catch(() => null);
-  if (!res || !res.ok) {
-    console.error(`Resend-Fehler ${res ? res.status : "nicht erreichbar"}: ${res ? await res.text() : ""}`);
-    return false;
+  let problem = "Resend nicht konfiguriert";
+  if (RESEND_KEY) {
+    // Gleicher Schlüssel für alle Versuche: Resend verschickt dieselbe Mail nie doppelt
+    const idempotencyKey = crypto.randomUUID();
+    for (const waitMs of [0, 2000, 5000]) {
+      if (waitMs) await new Promise(r => setTimeout(r, waitMs));
+      const res = await fetch("https://api.resend.com/emails", {
+        method:  "POST",
+        headers: { "Authorization": `Bearer ${RESEND_KEY}`, "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
+        body:    JSON.stringify({ from: FROM_EMAIL, to: [to], subject, html, text }),
+      }).catch(() => null);
+      if (res?.ok) return true;
+      problem = res ? `Resend-Fehler ${res.status}: ${await res.text()}` : "Resend nicht erreichbar";
+      // 4xx (außer 429) ist ein dauerhafter Fehler, Wiederholen bringt nichts
+      if (res && res.status < 500 && res.status !== 429) break;
+    }
   }
-  return true;
+  console.error(problem);
+  await sendTelegram(`⚠️ <b>Mail nicht versendet</b>\nAn: ${escapeHtml(to)}\nBetreff: ${escapeHtml(subject)}\n${escapeHtml(problem.slice(0, 300))}`);
+  return false;
 }
 
 export const sendWelcomeEmail = internalAction({

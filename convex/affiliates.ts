@@ -225,8 +225,9 @@ export const updateOwnProfile = mutation({
     const affiliate = await requireAffiliateSession(ctx, args.token);
 
     const patch: Record<string, unknown> = {};
+    // Leerer Text = Feld leeren (alle diese Felder sind optional)
     for (const k of IMMEDIATE_PROFILE_FIELDS) {
-      if (args[k] !== undefined) patch[k] = args[k];
+      if (args[k] !== undefined) patch[k] = args[k] === "" ? undefined : args[k];
     }
 
     // Nur sensible Felder, die sich ggü. dem freigegebenen Stand ändern → in pendingProfile.
@@ -234,7 +235,8 @@ export const updateOwnProfile = mutation({
     let hasPending = false;
     for (const k of SENSITIVE_PROFILE_FIELDS) {
       const val = args[k];
-      if (val !== undefined && val !== (affiliate as any)[k]) {
+      if (k === "name" && val === "") continue; // Name ist Pflicht
+      if (val !== undefined && val !== ((affiliate as any)[k] ?? "")) {
         pending[k] = val;
         hasPending = true;
       }
@@ -257,7 +259,10 @@ export const updateOwnProfile = mutation({
       hasPending = true;
     }
 
+    // Der Antrag spiegelt immer den aktuellen Unterschied; ist keiner mehr da
+    // (Änderung zurückgenommen), alten Antrag verwerfen.
     if (hasPending) patch.pendingProfile = { ...pending, submittedAt: Date.now() };
+    else if (affiliate.pendingProfile) patch.pendingProfile = undefined;
 
     await ctx.db.patch(affiliate._id, patch);
 

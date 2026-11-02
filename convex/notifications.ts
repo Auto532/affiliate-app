@@ -9,7 +9,7 @@ import { escapeHtml } from "./htmlEscape";
 const TG_TOKEN   = process.env.TELEGRAM_BOT_TOKEN ?? "";
 const TG_CHAT_ID = process.env.TELEGRAM_CHAT_ID   ?? "";
 
-async function sendTelegram(text: string): Promise<void> {
+export async function sendTelegram(text: string): Promise<void> {
   if (!TG_TOKEN || !TG_CHAT_ID) return;
   await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
     method:  "POST",

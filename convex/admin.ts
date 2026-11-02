@@ -56,6 +56,18 @@ export const adminLogin = mutation({
   },
 });
 
+// Für den Stempelkarten-Admin: ist der gemerkte Partner-App-Schlüssel noch gültig?
+export const isAdminSession = query({
+  args: { token: v.string() },
+  handler: async (ctx, args) => {
+    if (!args.token) return false;
+    const session = await ctx.db.query("adminSessions")
+      .withIndex("by_token", q => q.eq("token", args.token))
+      .unique();
+    return !!session && session.expiresAt > Date.now();
+  },
+});
+
 export const adminLogout = mutation({
   args: { token: v.string() },
   handler: async (ctx, args) => {
@@ -1040,7 +1052,9 @@ export const approveProfileChange = mutation({
     const a = await ctx.db.get(args.affiliateId);
     if (!a?.pendingProfile) throw new ConvexError("Keine ausstehende Änderung");
     const { submittedAt: _s, ...fields } = a.pendingProfile;
-    await ctx.db.patch(args.affiliateId, { ...fields, pendingProfile: undefined });
+    // Leerer Text im Antrag = Feld entfernen
+    const cleaned = Object.fromEntries(Object.entries(fields).map(([k, val]) => [k, val === "" ? undefined : val]));
+    await ctx.db.patch(args.affiliateId, { ...cleaned, pendingProfile: undefined });
     await ctx.db.insert("auditLog", {
       entityType: "affiliate",
       entityId:   args.affiliateId,

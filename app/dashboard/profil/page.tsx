@@ -77,7 +77,7 @@ export default function ProfilePage() {
       const textFields = [...IMMEDIATE, ...SENSITIVE].filter(k => k !== "businessType");
       const res = await update({
         token: token!,
-        ...Object.fromEntries(textFields.map(k => [k, form[k]?.trim() || undefined])),
+        ...Object.fromEntries(textFields.map(k => [k, (form[k] ?? "").trim()])),  // "" = Feld leeren
         businessType: form.businessType === "business" ? "business"
           : form.businessType === "private" ? "private" : undefined,
       });
